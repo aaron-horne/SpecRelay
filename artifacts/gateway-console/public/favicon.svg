@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="SpecRelay">
+  <rect width="32" height="32" rx="7" fill="#0B0D10"/>
+  <path d="M6 6h13c5 0 7 3 7 7s-3 3-10 3M16 16h-5c-4 0-6 2-6 5s3 5 7 5h14" fill="none" stroke="#32C5FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="6" cy="6" r="2.5" fill="#F5F7FA" stroke="#32C5FF" stroke-width="1.8"/>
+  <circle cx="26" cy="26" r="2.5" fill="#F5F7FA" stroke="#32C5FF" stroke-width="1.8"/>
+  <path d="m12 12 4-1.8 4 1.8v3.7c0 3.5-4 5.5-4 5.5s-4-2-4-5.5z" fill="#0B0D10" stroke="#32C5FF" stroke-width="1.8" stroke-linejoin="round"/>
+</svg>

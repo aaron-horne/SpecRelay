@@ -1,0 +1,887 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Security-first OpenAPI catalog API for SpecRelay
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: workspaces
+    description: Workspace lifecycle and isolation
+  - name: apis
+    description: Registered API sources and imported specifications
+  - name: operations
+    description: Normalized OpenAPI operation catalog
+  - name: credentials
+    description: Owner-managed API key and Bearer credentials
+  - name: mcp
+    description: Approved MCP tool discovery and invocation
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /workspaces:
+    get:
+      operationId: listWorkspaces
+      tags: [workspaces]
+      summary: List workspaces
+      responses:
+        "200":
+          description: Workspace list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
+    post:
+      operationId: createWorkspace
+      tags: [workspaces]
+      summary: Create a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceInput"
+      responses:
+        "201":
+          description: Created workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /workspaces/{workspaceId}:
+    get:
+      operationId: getWorkspace
+      tags: [workspaces]
+      summary: Get a workspace
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: MCP-Protocol-Version
+          in: header
+          required: true
+          schema:
+            type: string
+            const: "2026-07-28"
+        - name: Mcp-Method
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [server/discover, tools/list, tools/call]
+        - name: Mcp-Name
+          in: header
+          required: false
+          description: Required for tools/call and must match params.name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/overview:
+    get:
+      operationId: getWorkspaceOverview
+      tags: [workspaces]
+      summary: Get workspace catalog overview
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Catalog overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceOverview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis:
+    get:
+      operationId: listApis
+      tags: [apis]
+      summary: List registered APIs
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: API list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiSource"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createApi
+      tags: [apis]
+      summary: Register an API source
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiSourceInput"
+      responses:
+        "201":
+          description: Registered API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSource"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}:
+    get:
+      operationId: getApi
+      tags: [apis]
+      summary: Get an API source with its latest specification
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+      responses:
+        "200":
+          description: API source details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}/specifications:
+    post:
+      operationId: importSpecification
+      tags: [apis]
+      summary: Validate and import an OpenAPI document
+      description: >
+        Accepts pasted or uploaded JSON/YAML as text. Remote references and
+        external documentation are never fetched.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationImportInput"
+      responses:
+        "201":
+          description: Imported specification and discovered operations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          description: Specification exceeds the input size limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}/credentials:
+    get:
+      operationId: listCredentials
+      tags: [credentials]
+      summary: List safe credential metadata
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+      responses:
+        "200":
+          description: Credential metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CredentialMetadata"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: saveCredential
+      tags: [credentials]
+      summary: Create or replace a credential
+      description: Secret input is encrypted at rest and never returned.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialInput"
+      responses:
+        "200":
+          description: Safe credential metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialMetadata"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Workspace owner required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}/credentials/{credentialId}:
+    delete:
+      operationId: revokeCredential
+      tags: [credentials]
+      summary: Revoke a credential
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/CredentialId"
+      responses:
+        "200":
+          description: Revoked credential metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialMetadata"
+        "403":
+          description: Workspace owner required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}/operations:
+    get:
+      operationId: listOperations
+      tags: [operations]
+      summary: List normalized API operations
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+      responses:
+        "200":
+          description: Normalized operation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiOperation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/apis/{apiId}/operations/{operationId}:
+    get:
+      operationId: getOperation
+      tags: [operations]
+      summary: Get an operation detail
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/OperationId"
+      responses:
+        "200":
+          description: Operation detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiOperation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateOperationState
+      tags: [operations]
+      summary: Enable or disable an operation and its execution approval
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/OperationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationStateUpdate"
+      responses:
+        "200":
+          description: Updated operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiOperation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/mcp:
+    post:
+      operationId: invokeMcp
+      tags: [mcp]
+      summary: Discover or invoke approved MCP tools
+      description: >
+        Stateless MCP 2026-07-28 Streamable HTTP endpoint supporting
+        server/discover, tools/list, and tools/call. Requests require the
+        protocol's per-request metadata and matching MCP-Protocol-Version,
+        Mcp-Method, and, for tools/call, Mcp-Name headers. Only
+        explicitly approved unauthenticated HTTPS GET operations from the
+        latest stored specification are discoverable and executable.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpRequest"
+      responses:
+        "200":
+          description: JSON-RPC result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Operation is not approved for execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          description: Upstream request failed or was denied by the broker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Upstream request timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApiId:
+      name: apiId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CredentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+      required: [error]
+      additionalProperties: false
+    Workspace:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, createdAt, updatedAt]
+      additionalProperties: false
+    WorkspaceInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [name]
+      additionalProperties: false
+    WorkspaceOverview:
+      type: object
+      properties:
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        canManage:
+          type: boolean
+        apiCount:
+          type: integer
+          minimum: 0
+        operationCount:
+          type: integer
+          minimum: 0
+        enabledOperationCount:
+          type: integer
+          minimum: 0
+        recentAuditEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+      required: [workspace, role, canManage, apiCount, operationCount, enabledOperationCount, recentAuditEvents]
+      additionalProperties: false
+    ApiSource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspaceId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        latestSpecification:
+          anyOf:
+            - $ref: "#/components/schemas/ApiSpecVersion"
+            - type: "null"
+      required: [id, workspaceId, name, description, createdAt, updatedAt, latestSpecification]
+      additionalProperties: false
+    ApiSourceInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: [string, "null"]
+      required: [name]
+      additionalProperties: false
+    ApiDetail:
+      type: object
+      properties:
+        api:
+          $ref: "#/components/schemas/ApiSource"
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiOperation"
+        canManage:
+          type: boolean
+      required: [api, operations, canManage]
+      additionalProperties: false
+    SpecificationImportInput:
+      type: object
+      properties:
+        filename:
+          type: string
+          maxLength: 255
+        document:
+          type: string
+          minLength: 2
+          maxLength: 2097152
+      required: [document]
+      additionalProperties: false
+    ImportResult:
+      type: object
+      properties:
+        specification:
+          $ref: "#/components/schemas/ApiSpecVersion"
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiOperation"
+        validation:
+          $ref: "#/components/schemas/ValidationSummary"
+      required: [specification, operations, validation]
+      additionalProperties: false
+    ApiSpecVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        format:
+          type: string
+          enum: [json, yaml]
+        openapiVersion:
+          type: string
+        documentHash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        serverUrls:
+          type: array
+          items:
+            type: string
+        securitySchemes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiSecurityScheme"
+        validationWarnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityWarning"
+        importedAt:
+          type: string
+          format: date-time
+      required: [id, apiId, version, format, openapiVersion, documentHash, serverUrls, securitySchemes, validationWarnings, importedAt]
+      additionalProperties: false
+    ApiOperation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiId:
+          type: string
+          format: uuid
+        specificationId:
+          type: string
+          format: uuid
+        method:
+          type: string
+        path:
+          type: string
+        operationId:
+          type: [string, "null"]
+        displayName:
+          type: string
+        summary:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        parameters:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationParameter"
+        requestBody:
+          anyOf:
+            - $ref: "#/components/schemas/RequestBodyMetadata"
+            - type: "null"
+        responses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResponseMetadata"
+        securityRequirements:
+          type: array
+          items:
+            type: string
+        securityGroups:
+          type: array
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                scheme:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+              required: [scheme, scopes]
+              additionalProperties: false
+        risk:
+          type: string
+          enum: [READ_LIKE, WRITE, DESTRUCTIVE, UNKNOWN]
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        [id, apiId, specificationId, method, path, operationId, displayName,
+         summary, description, tags, parameters, requestBody, responses,
+         securityRequirements, securityGroups, risk, enabled, createdAt, updatedAt]
+      additionalProperties: false
+    ApiSecurityScheme:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [apiKey, http, unsupported]
+        location:
+          type: [string, "null"]
+          enum: [header, query, null]
+        parameterName:
+          type: [string, "null"]
+        bearer:
+          type: boolean
+      required: [name, type, location, parameterName, bearer]
+      additionalProperties: false
+    OperationParameter:
+      type: object
+      properties:
+        name:
+          type: string
+        location:
+          type: string
+          enum: [path, query, header, cookie]
+        required:
+          type: boolean
+        schemaType:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+      required: [name, location, required, schemaType, description]
+      additionalProperties: false
+    RequestBodyMetadata:
+      type: object
+      properties:
+        required:
+          type: boolean
+        contentTypes:
+          type: array
+          items:
+            type: string
+        description:
+          type: [string, "null"]
+      required: [required, contentTypes, description]
+      additionalProperties: false
+    ResponseMetadata:
+      type: object
+      properties:
+        statusCode:
+          type: string
+        description:
+          type: [string, "null"]
+        contentTypes:
+          type: array
+          items:
+            type: string
+      required: [statusCode, description, contentTypes]
+      additionalProperties: false
+    OperationStateUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+      additionalProperties: false
+    ValidationSummary:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityWarning"
+        unsupported:
+          type: array
+          items:
+            type: string
+      required: [valid, warnings, unsupported]
+      additionalProperties: false
+    CredentialMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        schemeName:
+          type: string
+        type:
+          type: string
+          enum: [API_KEY, BEARER]
+        location:
+          type: string
+          enum: [header, query]
+        parameterName:
+          type: string
+        label:
+          type: string
+        configured:
+          type: boolean
+        status:
+          type: string
+          enum: [ACTIVE, DISABLED, REVOKED]
+        destinationHost:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, schemeName, type, location, parameterName, label, configured, status, destinationHost, createdAt, updatedAt]
+      additionalProperties: false
+    CredentialInput:
+      type: object
+      properties:
+        schemeName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        secret:
+          type: string
+          minLength: 1
+          maxLength: 8192
+      required: [schemeName, label, secret]
+      additionalProperties: false
+    SecurityWarning:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        path:
+          type: [string, "null"]
+        severity:
+          type: string
+          enum: [info, warning, blocked]
+      required: [code, message, path, severity]
+      additionalProperties: false
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspaceId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        resourceType:
+          type: [string, "null"]
+        resourceId:
+          type: [string, "null"]
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, workspaceId, eventType, resourceType, resourceId, metadata, createdAt]
+      additionalProperties: false
+    McpRequest:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        id:
+          anyOf:
+            - type: string
+            - type: integer
+            - type: "null"
+        method:
+          type: string
+          enum: [server/discover, tools/list, tools/call]
+        params:
+          type: object
+          additionalProperties: true
+      required: [jsonrpc, id, method, params]
+      additionalProperties: false
+    McpResponse:
+      type: object
+      description: JSON-RPC response containing either a tool list or tool call result.
+      additionalProperties: true
+

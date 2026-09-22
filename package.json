@@ -1,0 +1,31 @@
+{
+  "name": "specrelay",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:security": "vitest run --config vitest.security.config.ts",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
+    "migration:validate": "MIGRATION_VALIDATION=true pnpm exec vitest run lib/db/src/migrations.validation.test.ts"
+  },
+  "private": true,
+  "packageManager": "pnpm@10.26.1",
+  "dependencies": {
+    "@replit/connectors-sdk": "^0.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.39.1",
+    "prettier": "^3.9.6",
+    "supertest": "^7.1.4",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^3.2.4"
+  }
+}

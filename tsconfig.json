@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./lib/core"
+    },
+    {
+      "path": "./lib/security"
+    },
+    {
+      "path": "./lib/openapi"
+    },
+    {
+      "path": "./lib/mcp"
+    },
+    {
+      "path": "./lib/db"
+    },
+    {
+      "path": "./lib/api-client-react"
+    },
+    {
+      "path": "./lib/api-zod"
+    }
+  ]
+}
