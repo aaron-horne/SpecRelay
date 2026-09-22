@@ -27,12 +27,20 @@ export function Shell({ children, actions }: { children: React.ReactNode; action
             </Link>
             <div aria-disabled="true" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-sidebar-foreground/60 cursor-not-allowed">
               <Database className="w-4 h-4 mr-3" />
-              Data Sources (Coming Soon)
+              API Sources (Coming Soon)
             </div>
-            <div aria-disabled="true" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-sidebar-foreground/60 cursor-not-allowed">
+            <Link
+              href="/execution-logs"
+              data-testid="link-execution-logs"
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                location.startsWith("/execution-logs")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "hover:bg-sidebar-accent/50"
+              }`}
+            >
               <Activity className="w-4 h-4 mr-3" />
-              Execution Logs (Coming Soon)
-            </div>
+              Execution Logs
+            </Link>
           </nav>
         </div>
         <div className="p-4 border-t border-sidebar-border text-xs text-sidebar-foreground/70 font-mono">

@@ -14,6 +14,7 @@ import WorkspacesPage from "@/pages/workspaces";
 import WorkspaceDetailPage from "@/pages/workspace-detail";
 import ApiDetailPage from "@/pages/api-detail";
 import OperationDetailPage from "@/pages/operation-detail";
+import ExecutionLogsPage from "@/pages/execution-logs";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -119,6 +120,7 @@ function ProtectedConsole() {
               <Route path="/workspaces/:workspaceId" component={WorkspaceDetailPage} />
               <Route path="/workspaces/:workspaceId/apis/:apiId" component={ApiDetailPage} />
               <Route path="/workspaces/:workspaceId/apis/:apiId/operations/:operationId" component={OperationDetailPage} />
+              <Route path="/execution-logs" component={ExecutionLogsPage} />
               <Route component={NotFound} />
             </Switch>
           </RoutedErrorBoundary>

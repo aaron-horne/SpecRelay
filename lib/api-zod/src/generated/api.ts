@@ -109,6 +109,62 @@ export const GetWorkspaceOverviewResponse = zod.object({
 
 
 /**
+ * Returns a bounded, read-only view of execution events from workspaces accessible to the authenticated user.
+ * @summary List execution audit events
+ */
+export const listExecutionLogsQueryPageDefault = 1;
+
+export const listExecutionLogsQueryPageSizeDefault = 25;
+export const listExecutionLogsQueryPageSizeMax = 50;
+
+export const listExecutionLogsQuerySearchMax = 100;
+
+
+
+export const ListExecutionLogsQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listExecutionLogsQueryPageDefault),
+  "pageSize": zod.coerce.number().int().min(1).max(listExecutionLogsQueryPageSizeMax).default(listExecutionLogsQueryPageSizeDefault),
+  "workspaceId": zod.coerce.string().uuid().optional(),
+  "outcome": zod.enum(['ATTEMPTED', 'SUCCESS', 'DENIED', 'ERROR']).optional(),
+  "search": zod.coerce.string().min(1).max(listExecutionLogsQuerySearchMax).optional()
+})
+
+export const listExecutionLogsResponseItemsItemUpstreamStatusMin = 100;
+export const listExecutionLogsResponseItemsItemUpstreamStatusMax = 599;
+
+
+export const listExecutionLogsResponsePageSizeMax = 50;
+
+export const listExecutionLogsResponseTotalMin = 0;
+
+export const listExecutionLogsResponseTotalPagesMin = 0;
+
+
+
+export const ListExecutionLogsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "createdAt": zod.coerce.date(),
+  "workspaceId": zod.string().uuid(),
+  "workspaceName": zod.string(),
+  "apiId": zod.string().uuid().nullable(),
+  "apiName": zod.string().nullable(),
+  "operationId": zod.string().uuid().nullable(),
+  "toolName": zod.string().nullable(),
+  "method": zod.string().nullable(),
+  "path": zod.string().nullable(),
+  "eventType": zod.string(),
+  "outcome": zod.enum(['ATTEMPTED', 'SUCCESS', 'DENIED', 'ERROR']),
+  "upstreamStatus": zod.number().int().min(listExecutionLogsResponseItemsItemUpstreamStatusMin).max(listExecutionLogsResponseItemsItemUpstreamStatusMax).nullable()
+})),
+  "page": zod.number().int().min(1),
+  "pageSize": zod.number().int().min(1).max(listExecutionLogsResponsePageSizeMax),
+  "total": zod.number().int().min(listExecutionLogsResponseTotalMin),
+  "totalPages": zod.number().int().min(listExecutionLogsResponseTotalPagesMin)
+})
+
+
+/**
  * @summary List registered APIs
  */
 export const ListApisParams = zod.object({

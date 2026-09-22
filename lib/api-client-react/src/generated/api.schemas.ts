@@ -318,6 +318,58 @@ export interface CredentialInput {
   secret: string;
 }
 
+export type ExecutionOutcome = typeof ExecutionOutcome[keyof typeof ExecutionOutcome];
+
+
+export const ExecutionOutcome = {
+  ATTEMPTED: 'ATTEMPTED',
+  SUCCESS: 'SUCCESS',
+  DENIED: 'DENIED',
+  ERROR: 'ERROR',
+} as const;
+
+export interface ExecutionLogEntry {
+  id: string;
+  createdAt: string;
+  workspaceId: string;
+  workspaceName: string;
+  /** @nullable */
+  apiId: string | null;
+  /** @nullable */
+  apiName: string | null;
+  /** @nullable */
+  operationId: string | null;
+  /** @nullable */
+  toolName: string | null;
+  /** @nullable */
+  method: string | null;
+  /** @nullable */
+  path: string | null;
+  eventType: string;
+  outcome: ExecutionOutcome;
+  /**
+     * @minimum 100
+     * @maximum 599
+     * @nullable
+     */
+  upstreamStatus: number | null;
+}
+
+export interface ExecutionLogPage {
+  items: ExecutionLogEntry[];
+  /** @minimum 1 */
+  page: number;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  pageSize: number;
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  totalPages: number;
+}
+
 export type McpRequestMethod = typeof McpRequestMethod[keyof typeof McpRequestMethod];
 
 
@@ -347,7 +399,31 @@ export interface McpResponse { [key: string]: unknown }
 export type BadRequestResponse = ErrorResponse;
 
 /**
+ * Authentication required
+ */
+export type UnauthorizedResponse = ErrorResponse;
+
+/**
  * Resource not found
  */
 export type NotFoundResponse = ErrorResponse;
+
+export type ListExecutionLogsParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+pageSize?: number;
+workspaceId?: string;
+outcome?: ExecutionOutcome;
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+search?: string;
+};
 

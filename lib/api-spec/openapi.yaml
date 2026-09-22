@@ -20,6 +20,8 @@ tags:
     description: Owner-managed API key and Bearer credentials
   - name: mcp
     description: Approved MCP tool discovery and invocation
+  - name: execution
+    description: Read-only execution observability
 paths:
   /healthz:
     get:
@@ -115,6 +117,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceOverview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /execution-logs:
+    get:
+      operationId: listExecutionLogs
+      tags: [execution]
+      summary: List execution audit events
+      description: Returns a bounded, read-only view of execution events from workspaces accessible to the authenticated user.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 25
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: outcome
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ExecutionOutcome"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+      responses:
+        "200":
+          description: Paginated execution audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionLogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
   /workspaces/{workspaceId}/apis:
@@ -427,6 +482,12 @@ components:
   responses:
     BadRequest:
       description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication required
       content:
         application/json:
           schema:
@@ -860,6 +921,69 @@ components:
           type: string
           format: date-time
       required: [id, workspaceId, eventType, resourceType, resourceId, metadata, createdAt]
+      additionalProperties: false
+    ExecutionOutcome:
+      type: string
+      enum: [ATTEMPTED, SUCCESS, DENIED, ERROR]
+    ExecutionLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        workspaceId:
+          type: string
+          format: uuid
+        workspaceName:
+          type: string
+        apiId:
+          type: [string, "null"]
+          format: uuid
+        apiName:
+          type: [string, "null"]
+        operationId:
+          type: [string, "null"]
+          format: uuid
+        toolName:
+          type: [string, "null"]
+        method:
+          type: [string, "null"]
+        path:
+          type: [string, "null"]
+        eventType:
+          type: string
+        outcome:
+          $ref: "#/components/schemas/ExecutionOutcome"
+        upstreamStatus:
+          type: [integer, "null"]
+          minimum: 100
+          maximum: 599
+      required: [id, createdAt, workspaceId, workspaceName, apiId, apiName, operationId, toolName, method, path, eventType, outcome, upstreamStatus]
+      additionalProperties: false
+    ExecutionLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionLogEntry"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 50
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+      required: [items, page, pageSize, total, totalPages]
       additionalProperties: false
     McpRequest:
       type: object

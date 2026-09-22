@@ -28,13 +28,16 @@ import type {
   CredentialInput,
   CredentialMetadata,
   ErrorResponse,
+  ExecutionLogPage,
   HealthStatus,
   ImportResult,
+  ListExecutionLogsParams,
   McpRequest,
   McpResponse,
   NotFoundResponse,
   OperationStateUpdate,
   SpecificationImportInput,
+  UnauthorizedResponse,
   Workspace,
   WorkspaceInput,
   WorkspaceOverview
@@ -452,6 +455,91 @@ export function useGetWorkspaceOverview<TData = Awaited<ReturnType<typeof getWor
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetWorkspaceOverviewQueryOptions(workspaceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListExecutionLogsUrl = (params?: ListExecutionLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/execution-logs?${stringifiedParams}` : `/api/execution-logs`
+}
+
+/**
+ * Returns a bounded, read-only view of execution events from workspaces accessible to the authenticated user.
+ * @summary List execution audit events
+ */
+export const listExecutionLogs = async (params?: ListExecutionLogsParams, options?: Parameters<typeof customFetch>[1]): Promise<ExecutionLogPage> => {
+
+  return customFetch<ExecutionLogPage>(getListExecutionLogsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListExecutionLogsQueryKey = (params?: ListExecutionLogsParams,) => {
+    return [
+    `/api/execution-logs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListExecutionLogsQueryOptions = <TData = Awaited<ReturnType<typeof listExecutionLogs>>, TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse>>(params?: ListExecutionLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExecutionLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListExecutionLogsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExecutionLogs>>> = ({ signal }) => listExecutionLogs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listExecutionLogs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListExecutionLogsQueryResult = NonNullable<Awaited<ReturnType<typeof listExecutionLogs>>>
+export type ListExecutionLogsQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse>
+
+
+/**
+ * @summary List execution audit events
+ */
+
+export function useListExecutionLogs<TData = Awaited<ReturnType<typeof listExecutionLogs>>, TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse>>(
+ params?: ListExecutionLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExecutionLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListExecutionLogsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
