@@ -79,6 +79,8 @@ Connector tokens are an opt-in, default-off alternative for **only** the workspa
 MCP endpoint. Set `CONNECTOR_TOKENS_ENABLED=true` after deploying the additive
 database migration to enable OWNER-only creation, rotation, revocation, and
 service-actor MCP access. With the flag off, human Clerk access is unchanged.
+The code and self-hosted default remain off; enabling the flag is an explicit
+deployment configuration choice.
 Each connector has a workspace MEMBER identity and an explicit `tools:list`
 and/or `tools:call` scope; it cannot manage APIs or credentials. Create tokens
 from the workspace console, copy the secret once, and supply it as

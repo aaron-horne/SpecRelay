@@ -1,7 +1,7 @@
-# Connector Tokens / External Client Authentication (proposed)
+# Connector Tokens / External Client Authentication
 
 **Status: implemented behind the default-off `CONNECTOR_TOKENS_ENABLED` flag.**
-This document records the design and security boundary. Connector tokens
+This document records the implemented design and security boundary. Connector tokens
 authenticate *inbound* MCP clients; stored API-key and HTTP Bearer credentials
 authenticate *outbound* requests to imported APIs. Connection presets and
 product-specific protocol adapters are not provided.
@@ -22,7 +22,7 @@ generic HTTP proxy. It does not broaden the existing HTTPS `GET`-only,
 no-request-body execution contract. Caller-supplied credentials for upstream
 APIs, arbitrary destinations, and policy overrides remain forbidden.
 
-## Proposed trust and authorization model
+## Trust and authorization model
 
 - Keep Clerk human authentication and OWNER-only catalog, approval, and
   credential management unchanged. Connector tokens are accepted only on the
@@ -106,16 +106,16 @@ External AI/MCP client
   -> sanitized result + append-only workspace audit
 ```
 
-## Proposed management and observability surface
+## Management and observability surface
 
-Conceptually, OWNER-only workspace endpoints would create/list token metadata,
-rotate, and revoke; list responses contain only safe metadata (name, actor,
-scopes, prefix, timestamps, status), never a verifier or secret. An OWNER-only
-console view could create a token, show its one-time value, list active/revoked
-tokens, and manage rotation/revocation. Client setup guidance and presets can
-explain the MCP URL, required protocol headers, and safe token storage without
-claiming compatibility with untested clients. Exact routes and UI are deferred
-to API design and security review.
+OWNER-only workspace endpoints create/list token metadata, rotate, and revoke;
+list responses contain only safe metadata (name, actor, scopes, prefix,
+timestamps, status), never a verifier or secret. The OWNER console can create a
+token, show its one-time value, list active/revoked tokens, and manage
+rotation/revocation. Client setup guidance and presets can explain the MCP URL,
+required protocol headers, and safe token storage without claiming compatibility
+with untested clients. Broader client adapters and product-specific integrations
+remain future work.
 
 Audit creation, rotation, revocation, denied scope, and execution with a
 distinct service actor type and stable internal actor ID; do not overload a
@@ -146,16 +146,16 @@ reverse proxies, telemetry, and UI clipboard flows for secret exposure.
 
 ## Migration, rollout, and acceptance
 
-Future additive migrations may introduce service actors, membership linkage,
-token metadata/verifiers/scopes, lifecycle timestamps, and audit actor typing.
-Preserve existing Clerk user memberships, approvals, encrypted outbound
-credentials, and audit rows. Use tenant-bound keys/constraints and a reversible
-rollout plan for new records; never rewrite existing human actor identities.
-Backfill must not silently grant service access. A default-off feature flag
-can gate token creation and token-authenticated MCP traffic separately. Roll
-out to test workspaces first, confirm audit/limits and revocation behavior,
-then enable more broadly; flag-off must reject connector tokens without
-affecting Clerk access.
+The additive migrations introduce service actors, membership linkage, token
+metadata/verifiers/scopes, lifecycle timestamps, rate-limit state, and audit
+actor typing. Existing Clerk user memberships, approvals, encrypted outbound
+credentials, and audit rows are preserved. Tenant-bound keys and constraints
+remain in force; backfills do not silently grant service access. The
+`CONNECTOR_TOKENS_ENABLED` flag gates token creation and token-authenticated MCP
+traffic separately. It remains default-off for self-hosted deployments;
+flag-off rejects Connector Tokens without affecting Clerk access. Production
+enablement is an explicit deployment configuration decision, followed by
+validation of audit, limits, and revocation behavior.
 
 Security acceptance criteria include:
 

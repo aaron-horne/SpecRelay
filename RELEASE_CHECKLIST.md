@@ -34,6 +34,28 @@ that deployment has occurred.
 - [ ] Complete staging smoke tests for import, approval, MCP discovery/call,
       denial paths, audit records, outbound policy, and credential redaction.
 
+## Connector Token production smoke evidence
+
+The following controlled production smoke-test lifecycle was completed for a
+workspace-bound Connector Token. It is evidence for this flow only, not a
+substitute for the complete release checklist or a claim of general production
+readiness:
+
+- [x] OWNER created a token with the intended explicit scope(s); the secret was
+      revealed only once.
+- [x] The scoped `tools:list` request succeeded with HTTP 200.
+- [x] A `tools:call` request outside the token's granted scope was rejected with
+      HTTP 403 `SCOPE_DENIED`; no upstream execution occurred.
+- [x] OWNER revoked the token.
+- [x] Reuse after revocation was rejected with HTTP 401 `UNAUTHENTICATED`.
+- [x] Expected evidence was confirmed: creation and revocation audit events,
+      denied-scope security/audit evidence, and post-revocation
+      `invalid_credential` security evidence, with no post-revocation scope
+      denial or execution-attempt audit.
+
+This smoke test does not complete the remaining CI, migration, security review,
+release, publication, or broader integration gates below.
+
 ## Public-release checks
 
 - [ ] Check every README, policy, architecture, threat-model, license, and

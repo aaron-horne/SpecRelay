@@ -6,20 +6,23 @@ security review, threat-model updates, and regression coverage.
 
 ## External Connections / Client Authentication
 
-- Explore scoped connector or service credentials for non-human, headless AI
-  clients. These are future inbound client credentials, distinct from the
-  existing API-key and Bearer credentials used for outbound API calls.
-- Bind each service actor to specific workspaces with least-privilege access,
-  revocation and rotation, optional expiry, and auditable identity and activity.
-  Preserve all existing workspace authorization, operation approval, policy,
-  managed-credential, network, and audit gates for every tool invocation.
-- Provide client connection guidance and presets for supported integrations
-  if and when external client authentication is implemented.
-- Explore additional consumer adapters beyond MCP without promising
-  compatibility with any protocol or AI system that is not implemented.
+- **Implemented:** Workspace-bound Connector Tokens provide non-human,
+  headless clients with explicit `tools:list` and `tools:call` scopes on the
+  workspace MCP endpoint. OWNERs manage creation, one-time reveal, rotation,
+  revocation, and optional expiry. Shared database-backed rate limits and
+  protected connector security events cover authentication and abuse controls.
+  Existing workspace membership, operation approval, policy,
+  managed-credential, network, execution-lease, and audit gates remain
+  authoritative for every discovery and invocation.
+- Connector Tokens are distinct from the API-key and Bearer credentials used
+  for outbound API calls. They do not grant OWNER privileges or access to
+  non-MCP routes.
+- Future work includes client connection guidance and presets, additional
+  consumer protocols and broader integrations, without promising compatibility
+  with an unimplemented protocol or AI system.
 
 See [Connector Tokens / External Client Authentication](CONNECTOR_TOKENS_DESIGN.md)
-for a proposed security and lifecycle design, not a current capability.
+for the implemented security and lifecycle design.
 
 ## Execution capabilities
 
@@ -45,5 +48,7 @@ for a proposed security and lifecycle design, not a current capability.
 
 The current release remains authenticated, HTTPS `GET`-only, and has no request
 bodies or OAuth flows. It supports declared API-key and HTTP Bearer credentials
-for outbound API calls only, and has no trusted AI path. It does not yet issue
-scoped connector/service credentials or provide additional consumer adapters.
+for outbound API calls only, and has no trusted AI path. Connector Tokens are
+implemented for the workspace MCP endpoint; the project does not yet provide
+additional consumer adapters. Write methods, request bodies, OAuth/OAuth2/OIDC,
+and broader identity federation remain future work.
