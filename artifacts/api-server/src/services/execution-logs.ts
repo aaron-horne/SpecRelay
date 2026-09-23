@@ -8,6 +8,7 @@ import {
   or,
   type SQL,
 } from "drizzle-orm";
+import type { PgSelect } from "drizzle-orm/pg-core";
 import {
   apiOperationsTable,
   apiSourcesTable,
@@ -102,7 +103,7 @@ export class ExecutionLogsService {
     }
 
     const where = and(...conditions);
-    const joins = (query: any) => query
+    const joins = <T extends PgSelect>(query: T) => query
       .innerJoin(
         workspaceMembershipsTable,
         and(
@@ -144,14 +145,14 @@ export class ExecutionLogsService {
           eventType: auditEventsTable.eventType,
           metadata: auditEventsTable.metadata,
         })
-        .from(auditEventsTable))
+        .from(auditEventsTable).$dynamic())
         .where(where)
         .orderBy(desc(auditEventsTable.createdAt), desc(auditEventsTable.id))
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize),
       joins(db
         .select({ value: count() })
-        .from(auditEventsTable))
+        .from(auditEventsTable).$dynamic())
         .where(where),
     ]);
 

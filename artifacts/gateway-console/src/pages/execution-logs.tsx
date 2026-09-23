@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useListExecutionLogs, useListWorkspaces, ExecutionOutcome } from "@workspace/api-client-react"
-import { Search, Activity, ShieldAlert, CheckCircle, AlertCircle, Clock, Server, ArrowRight } from "lucide-react"
+import { Search, Activity, ShieldAlert, CheckCircle, AlertCircle, Clock, Server } from "lucide-react"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent } from "@/components/ui/card"
 
 export default function ExecutionLogsPage() {
   const [page, setPage] = useState(1)
