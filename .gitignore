@@ -53,6 +53,7 @@ Thumbs.db
 .conversation/
 reviews/
 screenshots/
+/attached_assets/
 .agents/agent_assets_metadata.toml
 .agents/memory/
 /replit.md
