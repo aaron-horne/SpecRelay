@@ -83,6 +83,7 @@ export const apiSpecVersionsTable = pgTable(
       name: "api_spec_versions_workspace_api_fk",
     }).onDelete("cascade"),
     check("api_spec_versions_live_check", sql`${table.workspaceIsLive} = true`),
+    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "api_spec_versions_workspace_live_fk" }).onDelete("cascade"),
   ],
 );
 

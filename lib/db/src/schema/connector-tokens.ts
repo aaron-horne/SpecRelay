@@ -16,6 +16,7 @@ export const connectorActorsTable = pgTable("connector_actors", {
   uniqueIndex("connector_actors_member_unique").on(t.workspaceId, t.memberId),
   foreignKey({ columns: [t.workspaceId, t.memberId], foreignColumns: [workspaceMembershipsTable.workspaceId, workspaceMembershipsTable.userId] }).onDelete("cascade"),
   check("connector_actors_live_check", sql`${t.workspaceIsLive} = true`),
+  foreignKey({ columns: [t.workspaceId, t.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "connector_actors_workspace_live_fk" }).onDelete("cascade"),
 ]);
 
 export const connectorTokensTable = pgTable("connector_tokens", {
@@ -34,4 +35,5 @@ export const connectorTokensTable = pgTable("connector_tokens", {
   index("connector_tokens_workspace_actor_idx").on(t.workspaceId, t.actorId),
   foreignKey({ columns: [t.workspaceId, t.actorId], foreignColumns: [connectorActorsTable.workspaceId, connectorActorsTable.id] }).onDelete("cascade"),
   check("connector_tokens_live_check", sql`${t.workspaceIsLive} = true`),
+  foreignKey({ columns: [t.workspaceId, t.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "connector_tokens_workspace_live_fk" }).onDelete("cascade"),
 ]);

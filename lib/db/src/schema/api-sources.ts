@@ -2,6 +2,7 @@ import {
   index,
   boolean,
   check,
+  foreignKey,
   pgTable,
   text,
   timestamp,
@@ -38,6 +39,7 @@ export const apiSourcesTable = pgTable(
     ),
     uniqueIndex("api_sources_workspace_id_unique").on(table.workspaceId, table.id),
     check("api_sources_live_check", sql`${table.workspaceIsLive} = true`),
+    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "api_sources_workspace_live_fk" }).onDelete("cascade"),
   ],
 );
 

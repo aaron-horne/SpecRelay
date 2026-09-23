@@ -52,5 +52,6 @@ export const operationPoliciesTable = pgTable(
       name: "operation_policies_workspace_operation_fk",
     }).onDelete("cascade"),
     check("operation_policies_live_check", sql`${table.workspaceIsLive} = true`),
+    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "operation_policies_workspace_live_fk" }).onDelete("cascade"),
   ],
 );
