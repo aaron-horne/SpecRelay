@@ -16,7 +16,7 @@ import {
   workspaceMembershipsTable,
   workspacesTable,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "./app";
 
 function mcp(workspaceId: string, userId: string, method: string) {
@@ -140,5 +140,43 @@ describe.sequential("workspace deletion security", () => {
       eq(auditEventsTable.workspaceId, workspaceId),
       eq(auditEventsTable.eventType, "workspace.deleted"),
     ))).resolves.toHaveLength(0);
+  });
+
+  it("rolls back cleanup and the tombstone if the final audit insert fails", async () => {
+    const owner = `delete-rollback-${randomUUID()}`;
+    const name = `Rollback ${randomUUID()}`;
+    const workspaceId = (await request(app).post("/api/workspaces").set("x-test-user-id", owner)
+      .send({ name }).expect(201)).body.id as string;
+    const apiId = (await request(app).post(`/api/workspaces/${workspaceId}/apis`)
+      .set("x-test-user-id", owner).send({ name: "Still here" }).expect(201)).body.id as string;
+    const suffix = randomUUID().replaceAll("-", "");
+    const trigger = `test_delete_rollback_${suffix}`;
+    const functionName = `test_delete_rollback_fn_${suffix}`;
+
+    try {
+      // Restrict the injected failure to this workspace's deletion event.
+      await db.execute(sql.raw(`CREATE FUNCTION ${functionName}() RETURNS trigger
+        LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected audit failure'; END; $$`));
+      await db.execute(sql.raw(`CREATE TRIGGER ${trigger} BEFORE INSERT ON audit_events
+        FOR EACH ROW WHEN (NEW.event_type = 'workspace.deleted'
+          AND NEW.workspace_id = '${workspaceId}'::uuid)
+        EXECUTE FUNCTION ${functionName}()`));
+
+      await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner)
+        .send({ name }).expect(500);
+      const [workspace] = await db.select().from(workspacesTable).where(eq(workspacesTable.id, workspaceId));
+      expect(workspace?.deletedAt).toBeNull();
+      await expect(db.select().from(apiSourcesTable).where(eq(apiSourcesTable.id, apiId)))
+        .resolves.toHaveLength(1);
+      await expect(db.select().from(workspaceMembershipsTable)
+        .where(eq(workspaceMembershipsTable.workspaceId, workspaceId))).resolves.toHaveLength(1);
+      await expect(db.select().from(auditEventsTable).where(and(
+        eq(auditEventsTable.workspaceId, workspaceId),
+        eq(auditEventsTable.eventType, "workspace.deleted"),
+      ))).resolves.toHaveLength(0);
+    } finally {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS ${trigger} ON audit_events`));
+      await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+    }
   });
 });
