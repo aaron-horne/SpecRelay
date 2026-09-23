@@ -15,6 +15,7 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "~5.9.3",
     "vitest": "^4.1.11"
   }
