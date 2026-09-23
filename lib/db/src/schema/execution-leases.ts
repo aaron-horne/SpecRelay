@@ -37,7 +37,6 @@ export const executionLeasesTable = pgTable(
       name: "execution_leases_workspace_specification_fk",
     }).onDelete("cascade"),
     check("execution_leases_live_check", sql`${table.workspaceIsLive} = true`),
-    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "execution_leases_workspace_live_fk" }).onDelete("cascade"),
     foreignKey({
       columns: [table.workspaceId, table.apiId, table.specificationId, table.operationId],
       foreignColumns: [

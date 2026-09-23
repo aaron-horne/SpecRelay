@@ -35,6 +35,22 @@ describe("production workspace deletion catalog gate", () => {
       parentColumns: [...entry.parentColumns],
       ...(entry.name === "api_spec_versions_workspace_api_fk" ? { validated: true } : {}),
     }));
+    // The managed Stage 1 development database intentionally lacks these nine
+    // FKs. Model the final Stage 2 catalog in memory without altering the
+    // development schema; fresh migration-managed databases already have them.
+    const template = constraints.find((entry) => entry.name === "api_operations_workspace_api_fk")!;
+    for (const child of liveChildren) {
+      if (constraints.some((entry) => entry.name === `${child}_workspace_live_fk`)) continue;
+      constraints.push({
+        ...template,
+        name: `${child}_workspace_live_fk`,
+        child,
+        parent: "workspaces",
+        childColumns: ["workspace_id", "workspace_is_live"],
+        parentColumns: ["id", "is_live"],
+        validated: true,
+      });
+    }
     const columns = actualColumns.map((entry) => ({ ...entry }));
     return { constraints, columns };
   }
@@ -51,8 +67,9 @@ describe("production workspace deletion catalog gate", () => {
     expect(constraints).toHaveLength(27);
     expect(columns).toHaveLength(21);
     expect(hasWorkspaceDeletionGuards(constraints, columns)).toBe(true);
-    // The actual development catalog remains unvalidated for the known old row.
-    if (actualConstraints.some((row) => !row.validated)) {
+    // An incomplete Stage 1 catalog or the known historical NOT VALID row
+    // must fail closed, even though the complete in-memory fixture passes.
+    if (actualConstraints.length !== 27 || actualConstraints.some((row) => !row.validated)) {
       expect(hasWorkspaceDeletionGuards(actualConstraints, actualColumns)).toBe(false);
     }
   });

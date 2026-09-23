@@ -71,6 +71,5 @@ export const credentialMetadataTable = pgTable(
       name: "credential_metadata_workspace_api_fk",
     }).onDelete("cascade"),
     check("credential_metadata_live_check", sql`${table.workspaceIsLive} = true`),
-    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "credential_metadata_workspace_live_fk" }).onDelete("cascade"),
   ],
 );
