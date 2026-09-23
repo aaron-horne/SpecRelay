@@ -7,4 +7,6 @@ export * from "./credential-metadata";
 export * from "./audit-events";
 export * from "./workspace-memberships";
 export * from "./connector-tokens";
+export * from "./connector-rate-limits";
+export * from "./connector-security-events";
 export * from "./execution-leases";

@@ -17,9 +17,19 @@ import {
   type OutboundRequestBroker,
 } from "@workspace/security";
 import { CredentialService } from "./credentials";
+import { connectorAttribution } from "./connector-attribution";
 
 export class DatabaseAuditService implements AuditService {
   async record(event: AuditEventInput): Promise<void> {
+    const attribution: Record<string, string> = {};
+    if (event.actorId) {
+      if (event.actorId.startsWith("svc:")) {
+        Object.assign(attribution, await connectorAttribution(event.workspaceId, event.actorId));
+      } else {
+        attribution.actorId = event.actorId;
+        attribution.actorType = "HUMAN";
+      }
+    }
     await db.insert(auditEventsTable).values({
       workspaceId: event.workspaceId,
       eventType: event.eventType,
@@ -27,8 +37,7 @@ export class DatabaseAuditService implements AuditService {
       resourceId: event.resourceId,
       metadata: {
         ...event.metadata,
-        ...(event.actorId ? { actorId: event.actorId } : {}),
-        ...(event.actorId ? { actorType: event.actorId.startsWith("svc:") ? "CONNECTOR" : "HUMAN" } : {}),
+        ...attribution,
       },
     });
   }

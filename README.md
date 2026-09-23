@@ -86,9 +86,18 @@ from the workspace console, copy the secret once, and supply it as
 token continues to work for up to five minutes after rotation (or its prior
 expiry, if sooner); revoke to stop new requests immediately. Already dispatched
 calls cannot be recalled. Keep tokens in client secret storage, never in URLs
-or client-side code. Per-instance pre-authentication and per-actor request
-limits return HTTP 429; deployments with multiple API replicas must also
-configure shared ingress limits before enabling the flag.
+or client-side code. PostgreSQL atomically enforces the existing limits across
+API replicas and restarts: 600/IP and 60/IP-plus-lookup authentication attempts,
+and 120/workspace-actor requests per 60-second window. Exhaustion returns HTTP
+429; database failures do not allow unmetered requests. Apply all committed
+migrations before enabling the flag. Expired rate-limit buckets are eventually
+removed after one day. The append-only `connector_security_events` table records
+failed authentication and rate-limit categories (one event per exhausted
+limiter bucket/window), with verified workspace/actor IDs only when known.
+It contains no tokens, lookup IDs, IP addresses, headers,
+bodies, or credentials. Privileged operators can inspect events by time and,
+for verified actors, workspace; do not expose pre-auth events through a tenant
+API.
 
 API-key and Bearer secrets are AES-GCM encrypted at rest, bound to workspace,
 API source, and destination host, and injected only after authorization and

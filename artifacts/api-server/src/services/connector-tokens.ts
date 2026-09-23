@@ -1,27 +1,64 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, isNull, gt, desc } from "drizzle-orm";
-import { connectorActorsTable, connectorTokensTable, workspaceMembershipsTable, auditEventsTable, db } from "@workspace/db";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { and, eq, isNull, gt, desc, sql } from "drizzle-orm";
+import {
+  connectorActorsTable, connectorTokensTable, connectorRateLimitsTable,
+  connectorSecurityEventsTable, workspaceMembershipsTable, auditEventsTable, db,
+} from "@workspace/db";
+import { logger } from "../lib/logger";
+import { connectorAttribution } from "./connector-attribution";
 import { ServiceError } from "./errors";
 
 export const connectorsEnabled = () => process.env.CONNECTOR_TOKENS_ENABLED === "true";
 const format = /^srct_([a-f0-9]{24})_([A-Za-z0-9_-]{64})$/;
 const hash = (token: string) => createHash("sha256").update(token).digest();
 const dummy = hash("invalid-token");
-const windows = new Map<string, { count: number; until: number }>();
-
-// Local, bounded first-line protection; multi-instance deployments should also enforce
-// limits at their ingress. Never retain raw credentials in limit keys.
-export function limit(key: string, max: number): boolean {
-  const now = Date.now();
-  if (windows.size > 10_000) {
-    for (const [k, value] of windows) if (value.until <= now) windows.delete(k);
-    // Evict one old bucket rather than clearing *every* limiter under churn.
-    if (windows.size > 10_000) windows.delete(windows.keys().next().value!);
+// The atomic upsert serializes each key across all API replicas. The database
+// clock owns the 60-second window; no process-local enforcement state exists.
+export async function limit(key: string, max: number): Promise<{ allowed: boolean; firstDenied: boolean }> {
+  const keyHash = createHash("sha256").update(key).digest("hex");
+  const [row] = await db.insert(connectorRateLimitsTable)
+    .values({ keyHash, count: 1, until: sql`now() + interval '60 seconds'` })
+    .onConflictDoUpdate({
+      target: connectorRateLimitsTable.keyHash,
+      set: {
+        // max + 1 is the first rejection; max + 2 marks all later rejections.
+        count: sql`case when ${connectorRateLimitsTable.until} <= now() then 1 else least(${connectorRateLimitsTable.count} + 1, ${max + 2}) end`,
+        until: sql`case when ${connectorRateLimitsTable.until} <= now() then now() + interval '60 seconds' else ${connectorRateLimitsTable.until} end`,
+      },
+    })
+    .returning({ count: connectorRateLimitsTable.count });
+  if (!row) throw new Error("Connector limit unavailable");
+  // Retain expired buckets briefly for operational inspection without letting
+  // random identifier spraying grow the table forever.
+  if (randomInt(1024) === 0) {
+    try {
+      await pruneConnectorRateLimits();
+    } catch {
+      logger.warn("Connector limit maintenance failed");
+    }
   }
-  const entry = windows.get(key);
-  const next = !entry || entry.until <= now ? { count: 1, until: now + 60_000 } : { ...entry, count: entry.count + 1 };
-  windows.set(key, next);
-  return next.count <= max;
+  return { allowed: row.count <= max, firstDenied: row.count === max + 1 };
+}
+
+export async function pruneConnectorRateLimits(): Promise<void> {
+  // Use the same database clock as the upsert. A skewed replica cannot
+  // prematurely delete a live shared window.
+  await db.delete(connectorRateLimitsTable)
+    .where(sql`${connectorRateLimitsTable.until} < now() - interval '1 day'`);
+}
+
+export type ConnectorSecurityEvent =
+  | "invalid_credential" | "ambiguous_credential" | "authentication_rate_limited"
+  | "lookup_rate_limited" | "actor_rate_limited" | "workspace_mismatch" | "scope_denied";
+
+// Pre-auth events have no tenant association: never trust a requested workspace
+// or guessed token identifier as evidence of ownership.
+export async function recordConnectorSecurityEvent(eventType: ConnectorSecurityEvent, identity?: ConnectorIdentity): Promise<void> {
+  await db.insert(connectorSecurityEventsTable).values({
+    eventType,
+    workspaceId: identity?.workspaceId ?? null,
+    actorId: identity?.actorId ?? null,
+  });
 }
 
 function issue() {
@@ -59,7 +96,10 @@ export async function checkConnector(identity: ConnectorIdentity, scope: "tools:
 }
 
 export async function auditConnector(workspaceId: string, actorId: string, eventType: string, resourceId: string) {
-  await db.insert(auditEventsTable).values({ workspaceId, eventType, resourceType: "connector_actor", resourceId, metadata: { actorId, actorType: "CONNECTOR" } });
+  await db.insert(auditEventsTable).values({
+    workspaceId, eventType, resourceType: "connector_actor", resourceId,
+    metadata: await connectorAttribution(workspaceId, actorId),
+  });
 }
 
 export async function createConnector(workspaceId: string, ownerId: string, name: string, scopes: Array<"tools:list" | "tools:call">, expiresAt: Date | null) {

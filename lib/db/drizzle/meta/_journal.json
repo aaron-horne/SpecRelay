@@ -50,6 +50,13 @@
       "when": 1790160621141,
       "tag": "0006_powerful_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790161870615,
+      "tag": "0007_tricky_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

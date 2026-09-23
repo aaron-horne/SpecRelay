@@ -6,7 +6,6 @@ import {
   ilike,
   inArray,
   or,
-  sql,
   type SQL,
 } from "drizzle-orm";
 import type { PgSelect } from "drizzle-orm/pg-core";
@@ -17,7 +16,6 @@ import {
   db,
   workspacesTable,
   workspaceMembershipsTable,
-  connectorActorsTable,
 } from "@workspace/db";
 import { ServiceError } from "./errors";
 
@@ -128,11 +126,7 @@ export class ExecutionLogsService {
           eq(apiSourcesTable.workspaceId, auditEventsTable.workspaceId),
           eq(apiSourcesTable.id, apiOperationsTable.apiId),
         ),
-      )
-      .leftJoin(connectorActorsTable, and(
-        eq(connectorActorsTable.workspaceId, auditEventsTable.workspaceId),
-        eq(connectorActorsTable.memberId, sql`${auditEventsTable.metadata}->>'actorId'`),
-      ));
+      );
 
     const [rows, totalRows] = await Promise.all([
       joins(db
@@ -150,7 +144,6 @@ export class ExecutionLogsService {
           path: apiOperationsTable.path,
           eventType: auditEventsTable.eventType,
           metadata: auditEventsTable.metadata,
-          connectorName: connectorActorsTable.name,
         })
         .from(auditEventsTable).$dynamic())
         .where(where)
@@ -165,7 +158,15 @@ export class ExecutionLogsService {
 
     const total = totalRows[0]?.value ?? 0;
     return {
-      items: rows.map((row: typeof rows[number]) => ({
+      items: rows.map((row: typeof rows[number]) => {
+        const isConnector = row.metadata.actorType === "CONNECTOR" ||
+          (typeof row.metadata.actorId === "string" && row.metadata.actorId.startsWith("svc:"));
+        // Pre-snapshot audit rows remain identifiable as connectors, even if
+        // their actor record is gone. Never use a live name for old events.
+        const actorLabel = isConnector && typeof row.metadata.actorLabel === "string" &&
+          (row.metadata.actorLabel === "Connector" || row.metadata.actorLabel.startsWith("Connector: "))
+          ? row.metadata.actorLabel : isConnector ? "Connector" : "Workspace member";
+        return {
         id: row.id,
         createdAt: row.createdAt.toISOString(),
         workspaceId: row.workspaceId,
@@ -179,9 +180,10 @@ export class ExecutionLogsService {
         eventType: row.eventType,
         outcome: outcomeFor(row.eventType),
         upstreamStatus: safeUpstreamStatus(row.metadata),
-        actorType: row.connectorName ? "CONNECTOR" : "HUMAN",
-        actorLabel: row.connectorName ? `Connector: ${row.connectorName}` : "Workspace member",
-      })),
+        actorType: isConnector ? "CONNECTOR" : "HUMAN",
+        actorLabel,
+      };
+      }),
       page: input.page,
       pageSize: input.pageSize,
       total,

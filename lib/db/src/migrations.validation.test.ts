@@ -17,6 +17,7 @@ const migrationNames = [
   "0004_unknown_gladiator.sql",
   "0005_spooky_inhumans.sql",
   "0006_powerful_hammerhead.sql",
+  "0007_tricky_johnny_blaze.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -44,14 +45,17 @@ async function applyMigrations(
 
 describe("migration reconciliation", () => {
   it("contains no destructive migration operations", async () => {
-    const migration = await readFile(
+    for (const name of migrationNames) {
+      const migration = await readFile(path.join(migrationsDirectory, name), "utf8");
+      expect(migration).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE)\b/im);
+    }
+    const hardeningMigration = await readFile(
       path.join(migrationsDirectory, "0005_spooky_inhumans.sql"),
       "utf8",
     );
-    expect(migration).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE)\b/im);
-    expect(migration).toContain("ADD COLUMN IF NOT EXISTS");
-    expect(migration).toContain("CREATE TABLE IF NOT EXISTS");
-    expect(migration).toContain("pg_index");
+    expect(hardeningMigration).toContain("ADD COLUMN IF NOT EXISTS");
+    expect(hardeningMigration).toContain("CREATE TABLE IF NOT EXISTS");
+    expect(hardeningMigration).toContain("pg_index");
   });
 
   const databaseUrl = process.env.DATABASE_URL;
@@ -64,7 +68,7 @@ describe("migration reconciliation", () => {
   const integration = required || databaseUrl ? it : it.skip;
 
   integration(
-    "applies 0000-0006 fresh and reapplies 0005",
+    "applies 0000-0007 fresh and reapplies additive migrations",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
       const client = await pool.connect();
@@ -77,6 +81,7 @@ describe("migration reconciliation", () => {
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
         await applyMigrations(client, schema, 5, 6);
+        await applyMigrations(client, schema, 7, 8);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
@@ -87,6 +92,36 @@ describe("migration reconciliation", () => {
         expect(lease.rows[0].count).toBe(7);
         const connector = await client.query("SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid = 'connector_tokens'::regclass");
         expect(connector.rows[0].count).toBeGreaterThanOrEqual(2);
+        const connectorIndexes = await client.query(`
+          SELECT indexname FROM pg_indexes
+          WHERE schemaname = current_schema()
+            AND tablename IN ('connector_rate_limits', 'connector_security_events')
+          ORDER BY indexname
+        `);
+        expect(connectorIndexes.rows.map((row) => row.indexname)).toEqual([
+          "connector_rate_limits_pkey",
+          "connector_rate_limits_until_idx",
+          "connector_security_events_occurred_at_idx",
+          "connector_security_events_pkey",
+          "connector_security_events_workspace_occurred_at_idx",
+        ]);
+        const connectorColumns = await client.query(`
+          SELECT table_name, column_name, is_nullable
+          FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name IN ('connector_rate_limits', 'connector_security_events')
+          ORDER BY table_name, ordinal_position
+        `);
+        expect(connectorColumns.rows).toEqual([
+          { table_name: "connector_rate_limits", column_name: "key_hash", is_nullable: "NO" },
+          { table_name: "connector_rate_limits", column_name: "count", is_nullable: "NO" },
+          { table_name: "connector_rate_limits", column_name: "until", is_nullable: "NO" },
+          { table_name: "connector_security_events", column_name: "id", is_nullable: "NO" },
+          { table_name: "connector_security_events", column_name: "occurred_at", is_nullable: "NO" },
+          { table_name: "connector_security_events", column_name: "event_type", is_nullable: "NO" },
+          { table_name: "connector_security_events", column_name: "workspace_id", is_nullable: "YES" },
+          { table_name: "connector_security_events", column_name: "actor_id", is_nullable: "YES" },
+        ]);
       } finally {
         await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
         client.release();
@@ -278,6 +313,17 @@ describe("migration reconciliation", () => {
         await applyMigrations(client, schema, 5, 6);
         await applyMigrations(client, schema, 5, 6);
         await applyMigrations(client, schema, 6, 7);
+        await applyMigrations(client, schema, 7, 8);
+        await client.query(
+          `INSERT INTO connector_rate_limits (key_hash, count, until)
+           VALUES ('fixture-key', 3, now() + interval '1 minute')`,
+        );
+        await client.query(
+          `INSERT INTO connector_security_events
+             (id, event_type, workspace_id, actor_id)
+           VALUES ('a1000000-0000-4000-8000-000000000001', 'fixture.event', null, null)`,
+        );
+        await applyMigrations(client, schema, 7, 8);
 
         const after = await client.query(`
           SELECT
@@ -297,6 +343,23 @@ describe("migration reconciliation", () => {
            ORDER BY workspace_id, value`,
         );
         expect(valuesAfter.rows).toEqual(valuesBefore.rows);
+        expect((await client.query(
+          "SELECT key_hash, count FROM connector_rate_limits",
+        )).rows).toEqual([{ key_hash: "fixture-key", count: 3 }]);
+        expect((await client.query(
+          "SELECT event_type, workspace_id, actor_id FROM connector_security_events",
+        )).rows).toEqual([
+          { event_type: "fixture.event", workspace_id: null, actor_id: null },
+        ]);
+        const connectorForeignKeys = await client.query(`
+          SELECT count(*)::int AS count
+          FROM pg_constraint
+          WHERE conrelid IN (
+            'connector_rate_limits'::regclass,
+            'connector_security_events'::regclass
+          ) AND contype = 'f'
+        `);
+        expect(connectorForeignKeys.rows[0].count).toBe(0);
 
         const active = await client.query(
           "SELECT workspace_id, api_id, is_active FROM api_spec_versions ORDER BY workspace_id",
