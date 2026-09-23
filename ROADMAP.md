@@ -18,6 +18,9 @@ security review, threat-model updates, and regression coverage.
 - Explore additional consumer adapters beyond MCP without promising
   compatibility with any protocol or AI system that is not implemented.
 
+See [Connector Tokens / External Client Authentication](CONNECTOR_TOKENS_DESIGN.md)
+for a proposed security and lifecycle design, not a current capability.
+
 ## Execution capabilities
 
 - Write methods, with method-specific policy, explicit approval, least-privilege
