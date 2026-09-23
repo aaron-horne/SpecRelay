@@ -1,7 +1,7 @@
 import { getAuth } from "@clerk/express";
 import type { NextFunction, Request, Response } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, workspaceMembershipsTable } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
+import { db, workspaceMembershipsTable, workspacesTable } from "@workspace/db";
 
 const actors = new WeakMap<Request, string>();
 export function setConnectorActor(req: Request, memberId: string): void {
@@ -56,10 +56,12 @@ export async function requireWorkspaceMembership(
   const [membership] = await db
     .select({ workspaceId: workspaceMembershipsTable.workspaceId })
     .from(workspaceMembershipsTable)
+    .innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembershipsTable.workspaceId))
     .where(
       and(
         eq(workspaceMembershipsTable.workspaceId, workspaceId),
         eq(workspaceMembershipsTable.userId, userId),
+        isNull(workspacesTable.deletedAt),
       ),
     )
     .limit(1);
@@ -80,10 +82,12 @@ export async function requireWorkspaceOwner(
   const [membership] = await db
     .select({ role: workspaceMembershipsTable.role })
     .from(workspaceMembershipsTable)
+    .innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembershipsTable.workspaceId))
     .where(
       and(
         eq(workspaceMembershipsTable.workspaceId, workspaceId),
         eq(workspaceMembershipsTable.userId, userId),
+        isNull(workspacesTable.deletedAt),
       ),
     )
     .limit(1);

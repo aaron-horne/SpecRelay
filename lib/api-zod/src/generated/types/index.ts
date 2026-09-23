@@ -56,6 +56,7 @@ export * from './specificationImportInput';
 export * from './unauthorizedResponse';
 export * from './validationSummary';
 export * from './workspace';
+export * from './workspaceDeletionInput';
 export * from './workspaceInput';
 export * from './workspaceOverview';
 export * from './workspaceOverviewRole';

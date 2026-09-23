@@ -20,6 +20,8 @@ const migrationNames = [
   "0006_powerful_hammerhead.sql",
   "0007_tricky_johnny_blaze.sql",
   "0008_repair_connector_safeguards.sql",
+  "0009_workspace_deletion_tombstone.sql",
+  "0010_reject_deleted_workspace_writes.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -198,7 +200,7 @@ describe("migration reconciliation", () => {
   );
 
   integration(
-    "applies 0000-0008 fresh and reapplies additive migrations",
+    "applies all migrations fresh and reapplies additive migrations",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
       const client = await pool.connect();
@@ -208,6 +210,23 @@ describe("migration reconciliation", () => {
         await client.query(`SET search_path TO "${schema}", public`);
         await applyMigrations(client, schema);
         await expectConnectorSafeguards(client, true);
+        const deletedWorkspaceTriggers = await client.query<{ count: number }>(`
+          SELECT count(*)::int AS count
+          FROM pg_trigger
+          WHERE tgname LIKE '%_reject_deleted_workspace_write'
+            AND NOT tgisinternal
+            AND tgrelid IN (
+              SELECT oid FROM pg_class
+              WHERE relnamespace = current_schema()::regnamespace
+            )
+        `);
+        expect(deletedWorkspaceTriggers.rows[0]?.count).toBe(9);
+        await client.query(
+          "INSERT INTO workspaces (id, name, deleted_at) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now())",
+        );
+        await expect(client.query(
+          "INSERT INTO workspace_memberships (workspace_id, user_id, role) VALUES ('f0000000-0000-4000-8000-000000000001', 'fixture-user', 'MEMBER')",
+        )).rejects.toThrow();
         const tenantKeys = await client.query<{ count: number }>(`
           SELECT count(*)::int AS count FROM pg_constraint
           WHERE connamespace = current_schema()::regnamespace
@@ -228,7 +247,7 @@ describe("migration reconciliation", () => {
         );
         await applyMigrations(client, schema, 5, 6);
         await applyMigrations(client, schema, 7, 8);
-        await applyMigrations(client, schema, 8, 9);
+        await applyMigrations(client, schema, 8, 11);
         await expectConnectorSafeguards(client, true);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
@@ -306,8 +325,8 @@ describe("migration reconciliation", () => {
                   'a3000000-0000-4000-8000-000000000001',
                   'orphan-fixture', 'fixture-verifier', '[]')
         `);
-        await applyMigrations(client, schema, 8, 9);
-        await applyMigrations(client, schema, 8, 9);
+        await applyMigrations(client, schema, 8, 11);
+        await applyMigrations(client, schema, 8, 11);
         await expectConnectorSafeguards(client, false);
         const preserved = await client.query<{ count: number }>(
           "SELECT count(*)::int AS count FROM connector_tokens WHERE lookup_id = 'orphan-fixture'",

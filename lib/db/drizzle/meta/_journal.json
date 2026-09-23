@@ -64,6 +64,20 @@
       "when": 1790168533919,
       "tag": "0008_repair_connector_safeguards",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790170000000,
+      "tag": "0009_workspace_deletion_tombstone",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790171000000,
+      "tag": "0010_reject_deleted_workspace_writes",
+      "breakpoints": true
     }
   ]
 }

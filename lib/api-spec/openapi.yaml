@@ -103,6 +103,41 @@ paths:
                 $ref: "#/components/schemas/Workspace"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteWorkspace
+      tags: [workspaces]
+      summary: Permanently remove a workspace's active data
+      description: >
+        OWNER-only destructive operation. The workspace name must be supplied
+        exactly as confirmation. Historical audit and security evidence remains
+        attached to the workspace tombstone.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceDeletionInput"
+      responses:
+        "204":
+          description: Workspace deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Workspace owner required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Workspace has an active execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /workspaces/{workspaceId}/overview:
     get:
       operationId: getWorkspaceOverview
@@ -615,6 +650,15 @@ components:
       required: [id, name, createdAt, updatedAt]
       additionalProperties: false
     WorkspaceInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [name]
+      additionalProperties: false
+    WorkspaceDeletionInput:
       type: object
       properties:
         name:

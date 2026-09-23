@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   CreateWorkspaceBody,
   CreateWorkspaceResponse,
+  DeleteWorkspaceBody,
   GetWorkspaceOverviewParams,
   GetWorkspaceOverviewResponse,
   GetWorkspaceParams,
@@ -39,6 +40,25 @@ router.get("/workspaces/:workspaceId", async (req, res): Promise<void> => {
     return;
   }
   res.json(GetWorkspaceResponse.parse(await service.get(params.data.workspaceId, actorId(req))));
+});
+
+router.delete("/workspaces/:workspaceId", async (req, res): Promise<void> => {
+  const params = GetWorkspaceParams.safeParse(req.params);
+  const input = DeleteWorkspaceBody.strict().safeParse(req.body);
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid workspace identifier", code: "INVALID_INPUT" });
+    return;
+  }
+  if (!input.success) {
+    res.status(400).json({
+      error: "Workspace name confirmation is required",
+      code: "INVALID_INPUT",
+      details: input.error.issues.map((issue) => issue.message),
+    });
+    return;
+  }
+  await service.delete(params.data.workspaceId, actorId(req), input.data.name);
+  res.status(204).send();
 });
 
 router.get(

@@ -9,12 +9,14 @@ export const workspacesTable = pgTable("workspaces", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 export const insertWorkspaceSchema = createInsertSchema(workspacesTable).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  deletedAt: true,
 });
 
 export type WorkspaceRow = typeof workspacesTable.$inferSelect;

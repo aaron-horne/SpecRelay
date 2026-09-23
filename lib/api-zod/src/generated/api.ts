@@ -70,6 +70,25 @@ export const GetWorkspaceResponse = zod.object({
 
 
 /**
+ * OWNER-only destructive operation. The workspace name must be supplied exactly as confirmation. Historical audit and security evidence remains attached to the workspace tombstone.
+ * @summary Permanently remove a workspace's active data
+ */
+export const DeleteWorkspaceParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const deleteWorkspaceBodyNameMax = 120;
+
+
+
+export const DeleteWorkspaceBody = zod.object({
+  "name": zod.string().min(1).max(deleteWorkspaceBodyNameMax)
+})
+
+export const DeleteWorkspaceResponse = zod.void()
+
+
+/**
  * @summary Get workspace catalog overview
  */
 export const GetWorkspaceOverviewParams = zod.object({

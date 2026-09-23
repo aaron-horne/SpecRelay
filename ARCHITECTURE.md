@@ -25,6 +25,8 @@ Clerk's canonical `auth.userId` is the principal. Tenant-owned reads and writes 
 
 Isolation is application-enforced rather than PostgreSQL RLS: every tenant query carries workspace context, and composite tenant foreign keys bind workspace/API/specification/operation identities so a resource cannot be joined across workspaces. Audit rows are append-only and workspace-scoped.
 
+OWNER-confirmed workspace deletion permanently removes active catalog data, credentials, connector actors/tokens, leases, and memberships in one transaction. A deleted workspace retains only an inaccessible tombstone so append-only audit rows keep their original tenant foreign key. Historical connector security events remain associated with that workspace and retain their recorded actor identifier as a historical value, not an active credential or membership. Global rate-limit counters are not tenant records and expire normally. An active execution lease blocks deletion rather than allowing a call to outlive the cleanup.
+
 ## Express decision
 
 V0.1 retains the repository's existing Express 5 adapter instead of replacing it with Fastify. Fastify was recommended, not mandated, and replacing the already-provisioned HTTP artifact would add migration risk without strengthening a trust boundary. Express remains isolated to `artifacts/api-server`; validation, parsing, policy, persistence, and domain types do not depend on it. A future adapter replacement therefore does not require rewriting the trusted core.

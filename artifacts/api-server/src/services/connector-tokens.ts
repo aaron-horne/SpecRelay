@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { and, eq, isNull, gt, desc, sql } from "drizzle-orm";
 import {
   connectorActorsTable, connectorTokensTable, connectorRateLimitsTable,
-  connectorSecurityEventsTable, workspaceMembershipsTable, auditEventsTable, db,
+  connectorSecurityEventsTable, workspaceMembershipsTable, workspacesTable, auditEventsTable, db,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { connectorAttribution } from "./connector-attribution";
@@ -75,6 +75,7 @@ export async function verifyConnector(token: string): Promise<ConnectorIdentity 
     .from(connectorTokensTable)
     .innerJoin(connectorActorsTable, and(eq(connectorActorsTable.id, connectorTokensTable.actorId), eq(connectorActorsTable.workspaceId, connectorTokensTable.workspaceId)))
     .innerJoin(workspaceMembershipsTable, and(eq(workspaceMembershipsTable.workspaceId, connectorActorsTable.workspaceId), eq(workspaceMembershipsTable.userId, connectorActorsTable.memberId), eq(workspaceMembershipsTable.role, "MEMBER")))
+    .innerJoin(workspacesTable, and(eq(workspacesTable.id, connectorActorsTable.workspaceId), isNull(workspacesTable.deletedAt)))
     .where(eq(connectorTokensTable.lookupId, parsed[1]!)).limit(1) : [];
   const candidate = row ? Buffer.from(row.token.verifier, "hex") : dummy;
   const actual = hash(token);
@@ -89,6 +90,7 @@ export async function checkConnector(identity: ConnectorIdentity, scope: "tools:
     .from(connectorTokensTable)
     .innerJoin(connectorActorsTable, and(eq(connectorActorsTable.id, connectorTokensTable.actorId), eq(connectorActorsTable.workspaceId, connectorTokensTable.workspaceId)))
     .innerJoin(workspaceMembershipsTable, and(eq(workspaceMembershipsTable.workspaceId, connectorActorsTable.workspaceId), eq(workspaceMembershipsTable.userId, connectorActorsTable.memberId), eq(workspaceMembershipsTable.role, "MEMBER")))
+    .innerJoin(workspacesTable, and(eq(workspacesTable.id, connectorActorsTable.workspaceId), isNull(workspacesTable.deletedAt)))
     .where(and(eq(connectorTokensTable.id, identity.tokenId), eq(connectorTokensTable.workspaceId, identity.workspaceId),
       eq(connectorTokensTable.actorId, identity.actorId), isNull(connectorTokensTable.revokedAt),
     )).limit(1);

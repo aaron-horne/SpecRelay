@@ -30,6 +30,14 @@ export interface WorkspaceInput {
   name: string;
 }
 
+export interface WorkspaceDeletionInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+}
+
 export type WorkspaceOverviewRole = typeof WorkspaceOverviewRole[keyof typeof WorkspaceOverviewRole];
 
 

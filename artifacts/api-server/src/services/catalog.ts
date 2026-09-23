@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   apiOperationsTable,
   apiSourcesTable,
@@ -42,7 +42,7 @@ export class CatalogService {
     const [workspace] = await db
       .select({ id: workspacesTable.id })
       .from(workspacesTable)
-      .where(eq(workspacesTable.id, workspaceId))
+      .where(and(eq(workspacesTable.id, workspaceId), isNull(workspacesTable.deletedAt)))
       .limit(1);
     if (!workspace) {
       throw new ServiceError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");

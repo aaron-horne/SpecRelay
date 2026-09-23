@@ -43,6 +43,7 @@ import type {
   SpecificationImportInput,
   UnauthorizedResponse,
   Workspace,
+  WorkspaceDeletionInput,
   WorkspaceInput,
   WorkspaceOverview
 } from './api.schemas';
@@ -393,6 +394,96 @@ export function useGetWorkspace<TData = Awaited<ReturnType<typeof getWorkspace>>
 
 
 
+
+export const getDeleteWorkspaceUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}`
+}
+
+/**
+ * OWNER-only destructive operation. The workspace name must be supplied exactly as confirmation. Historical audit and security evidence remains attached to the workspace tombstone.
+ * @summary Permanently remove a workspace's active data
+ */
+export const deleteWorkspace = async (workspaceId: string,
+    workspaceDeletionInput: WorkspaceDeletionInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getDeleteWorkspaceUrl(workspaceId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(workspaceDeletionInput)
+  }
+);}
+
+
+
+
+
+export const getDeleteWorkspaceMutationKey = () => ['deleteWorkspace'] as const;
+
+export const getDeleteWorkspaceMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWorkspace>>, TError,DeleteWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWorkspace>>, TError,DeleteWorkspaceMutationVariables, TContext> => {
+
+const mutationKey = getDeleteWorkspaceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWorkspace>>, DeleteWorkspaceMutationVariables> = (props) => {
+          const {workspaceId,data} = props ?? {};
+
+          return  deleteWorkspace(workspaceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWorkspaceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWorkspace>>>
+    export type DeleteWorkspaceMutationBody = BodyType<WorkspaceDeletionInput>
+    export type DeleteWorkspaceMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type DeleteWorkspaceMutationVariables = {workspaceId: string;data: BodyType<WorkspaceDeletionInput>}
+
+    /**
+ * @summary Permanently remove a workspace's active data
+ */
+export const useDeleteWorkspace = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWorkspace>>, TError,DeleteWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWorkspace>>,
+        TError,
+        DeleteWorkspaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteWorkspaceMutationOptions(options));
+    }
 
 export const getGetWorkspaceOverviewUrl = (workspaceId: string,) => {
 
