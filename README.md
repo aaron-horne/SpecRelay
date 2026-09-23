@@ -1,10 +1,19 @@
 # SpecRelay
 
 SpecRelay is an early open-source project, not a finished commercial SaaS
-product. It is a security-first foundation for turning documented APIs into
-governed MCP tools:
+product. Its vision is a security-first governance and connection layer
+between documented APIs and AI systems: connect once, govern centrally, and
+make approved capabilities available through supported consumer interfaces.
 
-> Any documented API → governed MCP tools → least-privilege execution → auditability.
+> Connect once. Govern centrally. Use anywhere.
+
+MCP is the first consumer protocol, not a permanent limit on the project.
+Other interfaces are possible future directions, not supported compatibility
+today. The current milestone is narrower than the vision:
+
+> Today: OpenAPI in. Governed MCP tools out.
+
+Approved execution remains least-privilege and auditable.
 
 ## Why SpecRelay exists
 
@@ -18,7 +27,9 @@ should be.
 
 SpecRelay is an open-source attempt to make that easier: take a documented API,
 turn approved operations into governed MCP tools, and give AI-native builders a
-safer path to creating connectors.
+safer path to creating connectors. The longer-term goal is to govern API
+connections centrally for AI systems, without treating the current MCP
+interface as the only possible consumer.
 
 If you can understand the problem and describe what you want to build, you
 should not have to be a career software engineer to participate in the next
