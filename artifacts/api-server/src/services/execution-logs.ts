@@ -6,6 +6,7 @@ import {
   ilike,
   inArray,
   or,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import type { PgSelect } from "drizzle-orm/pg-core";
@@ -16,6 +17,7 @@ import {
   db,
   workspacesTable,
   workspaceMembershipsTable,
+  connectorActorsTable,
 } from "@workspace/db";
 import { ServiceError } from "./errors";
 
@@ -126,7 +128,11 @@ export class ExecutionLogsService {
           eq(apiSourcesTable.workspaceId, auditEventsTable.workspaceId),
           eq(apiSourcesTable.id, apiOperationsTable.apiId),
         ),
-      );
+      )
+      .leftJoin(connectorActorsTable, and(
+        eq(connectorActorsTable.workspaceId, auditEventsTable.workspaceId),
+        eq(connectorActorsTable.memberId, sql`${auditEventsTable.metadata}->>'actorId'`),
+      ));
 
     const [rows, totalRows] = await Promise.all([
       joins(db
@@ -144,6 +150,7 @@ export class ExecutionLogsService {
           path: apiOperationsTable.path,
           eventType: auditEventsTable.eventType,
           metadata: auditEventsTable.metadata,
+          connectorName: connectorActorsTable.name,
         })
         .from(auditEventsTable).$dynamic())
         .where(where)
@@ -172,6 +179,8 @@ export class ExecutionLogsService {
         eventType: row.eventType,
         outcome: outcomeFor(row.eventType),
         upstreamStatus: safeUpstreamStatus(row.metadata),
+        actorType: row.connectorName ? "CONNECTOR" : "HUMAN",
+        actorLabel: row.connectorName ? `Connector: ${row.connectorName}` : "Workspace member",
       })),
       page: input.page,
       pageSize: input.pageSize,

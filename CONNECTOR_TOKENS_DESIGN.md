@@ -1,11 +1,10 @@
 # Connector Tokens / External Client Authentication (proposed)
 
-**Status: future design, not a current SpecRelay capability.** No connector
-tokens, service identities, management endpoints, or connection presets exist
-today. Currently, the API and MCP endpoint authenticate through Clerk; stored
-API-key and HTTP Bearer credentials authenticate *outbound* requests to imported
-APIs, not inbound clients. This document specifies a possible next milestone
-for generic headless AI/MCP clients, not an integration with any one product.
+**Status: implemented behind the default-off `CONNECTOR_TOKENS_ENABLED` flag.**
+This document records the design and security boundary. Connector tokens
+authenticate *inbound* MCP clients; stored API-key and HTTP Bearer credentials
+authenticate *outbound* requests to imported APIs. Connection presets and
+product-specific protocol adapters are not provided.
 
 ## Goals and non-goals
 

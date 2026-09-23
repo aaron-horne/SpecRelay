@@ -105,6 +105,7 @@ export default function ExecutionLogsPage() {
             <TableRow className="border-card-border">
               <TableHead className="w-[180px]">Timestamp</TableHead>
               <TableHead className="w-[150px]">Workspace</TableHead>
+              <TableHead>Actor</TableHead>
               <TableHead className="w-[200px]">API / Tool</TableHead>
               <TableHead>Target</TableHead>
               <TableHead className="w-[190px]">Event</TableHead>
@@ -117,6 +118,7 @@ export default function ExecutionLogsPage() {
                 <TableRow key={i} className="border-card-border">
                   <TableCell><Skeleton className="h-4 w-[140px]" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-[150px]" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-[150px]" /></TableCell>
@@ -125,13 +127,13 @@ export default function ExecutionLogsPage() {
               ))
             ) : error ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-rose-400" data-testid="status-execution-logs-error">
+                <TableCell colSpan={7} className="h-24 text-center text-rose-400" data-testid="status-execution-logs-error">
                   Failed to load execution logs.
                 </TableCell>
               </TableRow>
             ) : logsPage?.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center" data-testid="status-execution-logs-empty">
+                <TableCell colSpan={7} className="h-48 text-center" data-testid="status-execution-logs-empty">
                   <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <Activity className="h-10 w-10 mb-4 opacity-20" />
                     <p className="font-medium text-foreground">No execution events found</p>
@@ -150,6 +152,7 @@ export default function ExecutionLogsPage() {
                   <TableCell className="font-medium text-sm">
                     {log.workspaceName}
                   </TableCell>
+                  <TableCell className="text-sm">{log.actorLabel}</TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
                       {log.apiName ? (

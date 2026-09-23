@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
+import { ConnectorTokens } from "@/components/connector-tokens"
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
@@ -205,6 +206,7 @@ export default function WorkspaceDetailPage() {
         </Card>
       </div>
 
+      {overview.canManage && <ConnectorTokens workspaceId={workspaceId} />}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="col-span-1 border-t-4 border-t-primary">
           <CardHeader>

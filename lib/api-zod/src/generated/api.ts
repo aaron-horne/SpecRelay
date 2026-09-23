@@ -109,6 +109,78 @@ export const GetWorkspaceOverviewResponse = zod.object({
 
 
 /**
+ * @summary List OWNER-managed connector token metadata
+ */
+export const ListConnectorsParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const ListConnectorsResponseItem = zod.object({
+  "actorId": zod.string().uuid(),
+  "tokenId": zod.string().uuid(),
+  "name": zod.string(),
+  "scopes": zod.array(zod.enum(['tools:list', 'tools:call'])),
+  "createdAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'expired', 'revoked'])
+})
+export const ListConnectorsResponse = zod.array(ListConnectorsResponseItem)
+
+
+/**
+ * @summary Issue a workspace-bound connector token (one-time reveal)
+ */
+export const CreateConnectorParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const createConnectorBodyNameMax = 100;
+
+export const createConnectorBodyScopesMax = 2;
+
+
+
+export const CreateConnectorBody = zod.object({
+  "name": zod.string().min(1).max(createConnectorBodyNameMax),
+  "scopes": zod.array(zod.enum(['tools:list', 'tools:call'])).min(1).max(createConnectorBodyScopesMax),
+  "expiresAt": zod.coerce.date().nullish()
+})
+
+export const CreateConnectorResponse = zod.object({
+  "actorId": zod.string().uuid(),
+  "token": zod.string().describe('Revealed once; never returned by a list or read endpoint')
+})
+
+
+/**
+ * @summary Rotate token with five-minute old-token overlap
+ */
+export const RotateConnectorParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "actorId": zod.coerce.string().uuid()
+})
+
+export const RotateConnectorResponse = zod.object({
+  "actorId": zod.string().uuid(),
+  "token": zod.string().describe('Revealed once; never returned by a list or read endpoint')
+})
+
+
+/**
+ * @summary Revoke all tokens for this service actor
+ */
+export const RevokeConnectorParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "actorId": zod.coerce.string().uuid()
+})
+
+export const RevokeConnectorResponse = zod.object({
+  "revoked": zod.boolean()
+})
+
+
+/**
  * Returns a bounded, read-only view of execution events from workspaces accessible to the authenticated user.
  * @summary List execution audit events
  */
@@ -155,7 +227,9 @@ export const ListExecutionLogsResponse = zod.object({
   "path": zod.string().nullable(),
   "eventType": zod.string(),
   "outcome": zod.enum(['ATTEMPTED', 'SUCCESS', 'DENIED', 'ERROR']),
-  "upstreamStatus": zod.number().int().min(listExecutionLogsResponseItemsItemUpstreamStatusMin).max(listExecutionLogsResponseItemsItemUpstreamStatusMax).nullable()
+  "upstreamStatus": zod.number().int().min(listExecutionLogsResponseItemsItemUpstreamStatusMin).max(listExecutionLogsResponseItemsItemUpstreamStatusMax).nullable(),
+  "actorType": zod.enum(['HUMAN', 'CONNECTOR']),
+  "actorLabel": zod.string()
 })),
   "page": zod.number().int().min(1),
   "pageSize": zod.number().int().min(1).max(listExecutionLogsResponsePageSizeMax),

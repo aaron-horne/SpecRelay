@@ -25,6 +25,9 @@ import type {
   ApiSource,
   ApiSourceInput,
   BadRequestResponse,
+  ConnectorInput,
+  ConnectorIssued,
+  ConnectorMetadata,
   CredentialInput,
   CredentialMetadata,
   ErrorResponse,
@@ -36,6 +39,7 @@ import type {
   McpResponse,
   NotFoundResponse,
   OperationStateUpdate,
+  RevokeConnector200,
   SpecificationImportInput,
   UnauthorizedResponse,
   Workspace,
@@ -466,6 +470,324 @@ export function useGetWorkspaceOverview<TData = Awaited<ReturnType<typeof getWor
 
 
 
+
+export const getListConnectorsUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/connectors`
+}
+
+/**
+ * @summary List OWNER-managed connector token metadata
+ */
+export const listConnectors = async (workspaceId: string, options?: Parameters<typeof customFetch>[1]): Promise<ConnectorMetadata[]> => {
+
+  return customFetch<ConnectorMetadata[]>(getListConnectorsUrl(workspaceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListConnectorsQueryKey = (workspaceId: string,) => {
+    return [
+    `/api/workspaces/${workspaceId}/connectors`
+    ] as const;
+    }
+
+
+export const getListConnectorsQueryOptions = <TData = Awaited<ReturnType<typeof listConnectors>>, TError = ErrorType<unknown>>(workspaceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListConnectorsQueryKey(workspaceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listConnectors>>> = ({ signal }) => listConnectors(workspaceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listConnectors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListConnectorsQueryResult = NonNullable<Awaited<ReturnType<typeof listConnectors>>>
+export type ListConnectorsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List OWNER-managed connector token metadata
+ */
+
+export function useListConnectors<TData = Awaited<ReturnType<typeof listConnectors>>, TError = ErrorType<unknown>>(
+ workspaceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListConnectorsQueryOptions(workspaceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateConnectorUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/connectors`
+}
+
+/**
+ * @summary Issue a workspace-bound connector token (one-time reveal)
+ */
+export const createConnector = async (workspaceId: string,
+    connectorInput: ConnectorInput, options?: Parameters<typeof customFetch>[1]): Promise<ConnectorIssued> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ConnectorIssued>(getCreateConnectorUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(connectorInput)
+  }
+);}
+
+
+
+
+
+export const getCreateConnectorMutationKey = () => ['createConnector'] as const;
+
+export const getCreateConnectorMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConnector>>, TError,CreateConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createConnector>>, TError,CreateConnectorMutationVariables, TContext> => {
+
+const mutationKey = getCreateConnectorMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createConnector>>, CreateConnectorMutationVariables> = (props) => {
+          const {workspaceId,data} = props ?? {};
+
+          return  createConnector(workspaceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateConnectorMutationResult = NonNullable<Awaited<ReturnType<typeof createConnector>>>
+    export type CreateConnectorMutationBody = BodyType<ConnectorInput>
+    export type CreateConnectorMutationError = ErrorType<unknown>
+    export type CreateConnectorMutationVariables = {workspaceId: string;data: BodyType<ConnectorInput>}
+
+    /**
+ * @summary Issue a workspace-bound connector token (one-time reveal)
+ */
+export const useCreateConnector = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConnector>>, TError,CreateConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createConnector>>,
+        TError,
+        CreateConnectorMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateConnectorMutationOptions(options));
+    }
+
+export const getRotateConnectorUrl = (workspaceId: string,
+    actorId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/connectors/${actorId}/rotate`
+}
+
+/**
+ * @summary Rotate token with five-minute old-token overlap
+ */
+export const rotateConnector = async (workspaceId: string,
+    actorId: string, options?: Parameters<typeof customFetch>[1]): Promise<ConnectorIssued> => {
+
+  return customFetch<ConnectorIssued>(getRotateConnectorUrl(workspaceId,actorId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRotateConnectorMutationKey = () => ['rotateConnector'] as const;
+
+export const getRotateConnectorMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rotateConnector>>, TError,RotateConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rotateConnector>>, TError,RotateConnectorMutationVariables, TContext> => {
+
+const mutationKey = getRotateConnectorMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rotateConnector>>, RotateConnectorMutationVariables> = (props) => {
+          const {workspaceId,actorId} = props ?? {};
+
+          return  rotateConnector(workspaceId,actorId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RotateConnectorMutationResult = NonNullable<Awaited<ReturnType<typeof rotateConnector>>>
+
+    export type RotateConnectorMutationError = ErrorType<unknown>
+    export type RotateConnectorMutationVariables = {workspaceId: string;actorId: string}
+
+    /**
+ * @summary Rotate token with five-minute old-token overlap
+ */
+export const useRotateConnector = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rotateConnector>>, TError,RotateConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rotateConnector>>,
+        TError,
+        RotateConnectorMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRotateConnectorMutationOptions(options));
+    }
+
+export const getRevokeConnectorUrl = (workspaceId: string,
+    actorId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/connectors/${actorId}`
+}
+
+/**
+ * @summary Revoke all tokens for this service actor
+ */
+export const revokeConnector = async (workspaceId: string,
+    actorId: string, options?: Parameters<typeof customFetch>[1]): Promise<RevokeConnector200> => {
+
+  return customFetch<RevokeConnector200>(getRevokeConnectorUrl(workspaceId,actorId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeConnectorMutationKey = () => ['revokeConnector'] as const;
+
+export const getRevokeConnectorMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeConnector>>, TError,RevokeConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeConnector>>, TError,RevokeConnectorMutationVariables, TContext> => {
+
+const mutationKey = getRevokeConnectorMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeConnector>>, RevokeConnectorMutationVariables> = (props) => {
+          const {workspaceId,actorId} = props ?? {};
+
+          return  revokeConnector(workspaceId,actorId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeConnectorMutationResult = NonNullable<Awaited<ReturnType<typeof revokeConnector>>>
+
+    export type RevokeConnectorMutationError = ErrorType<unknown>
+    export type RevokeConnectorMutationVariables = {workspaceId: string;actorId: string}
+
+    /**
+ * @summary Revoke all tokens for this service actor
+ */
+export const useRevokeConnector = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeConnector>>, TError,RevokeConnectorMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeConnector>>,
+        TError,
+        RevokeConnectorMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeConnectorMutationOptions(options));
+    }
 
 export const getListExecutionLogsUrl = (params?: ListExecutionLogsParams,) => {
   const normalizedParams = new URLSearchParams();

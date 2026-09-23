@@ -2,6 +2,8 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { actorId, requireWorkspaceMembership } from "../middlewares/auth";
 import { McpService } from "../services/execution";
 import { ServiceError } from "../services/errors";
+import { connectorIdentity, requireConnectorScope } from "../middlewares/connector-auth";
+import { checkConnector } from "../services/connector-tokens";
 
 const router: IRouter = Router();
 const service = new McpService();
@@ -151,6 +153,7 @@ router.post("/workspaces/:workspaceId/mcp", requireWorkspaceMembership, async (r
 
   const workspaceId = String(req.params.workspaceId);
   if (body.method === "tools/list") {
+    if (!(await requireConnectorScope(req, res, "tools:list"))) return;
     res.type("application/json").json({
       jsonrpc: "2.0",
       id,
@@ -173,11 +176,14 @@ router.post("/workspaces/:workspaceId/mcp", requireWorkspaceMembership, async (r
   }
 
   try {
+    if (!(await requireConnectorScope(req, res, "tools:call"))) return;
+    const identity = connectorIdentity(req);
     const result = await service.callTool(
       workspaceId,
       actorId(req),
       body.params.name,
       (body.params.arguments ?? {}) as Record<string, unknown>,
+      identity ? () => checkConnector(identity, "tools:call") : undefined,
     );
     const isError = result.status >= 400;
     res.type("application/json").json({

@@ -269,7 +269,7 @@ export class ExecutionService {
     return row;
   }
 
-  async execute(workspaceId: string, actorId: string, operationId: string, args: ToolArguments) {
+  async execute(workspaceId: string, actorId: string, operationId: string, args: ToolArguments, authorizeDispatch?: () => Promise<boolean>) {
     const row = await this.authorizedOperation(workspaceId, actorId, operationId);
     const operation = row.operation;
     const audit = securityServices.auditService;
@@ -340,6 +340,10 @@ export class ExecutionService {
     let lease: { leaseId: string; client: LeaseClient } | undefined;
     try {
       lease = await this.acquireLease(workspaceId, operation);
+      // Revocation cannot recall a call already dispatched, but always blocks new dispatches.
+      if (authorizeDispatch && !(await authorizeDispatch())) {
+        throw new ServiceError("Connector no longer authorized", 403, "EXECUTION_DENIED");
+      }
       const response = await (this.broker ?? securityServices.outboundRequestBroker).execute({
         workspaceId,
         actorId,
@@ -487,7 +491,7 @@ export class McpService {
     return eligible;
   }
 
-  async callTool(workspaceId: string, actorId: string, name: string, args: ToolArguments) {
+  async callTool(workspaceId: string, actorId: string, name: string, args: ToolArguments, authorizeDispatch?: () => Promise<boolean>) {
     const rows = await db.select({
       operation: apiOperationsTable,
       importedAt: apiSpecVersionsTable.importedAt,
@@ -513,6 +517,6 @@ export class McpService {
         mcpToolName(operationView(row.operation)) === name;
     })?.operation;
     if (!matching) throw new ServiceError("MCP tool not found", 404, "MCP_TOOL_NOT_FOUND");
-    return this.execution.execute(workspaceId, actorId, matching.id, args);
+    return this.execution.execute(workspaceId, actorId, matching.id, args, authorizeDispatch);
   }
 }

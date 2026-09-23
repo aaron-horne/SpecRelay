@@ -318,6 +318,65 @@ export interface CredentialInput {
   secret: string;
 }
 
+export type ConnectorInputScopesItem = typeof ConnectorInputScopesItem[keyof typeof ConnectorInputScopesItem];
+
+
+export const ConnectorInputScopesItem = {
+  'tools:list': 'tools:list',
+  'tools:call': 'tools:call',
+} as const;
+
+export interface ConnectorInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @minItems 1
+     * @maxItems 2
+     */
+  scopes: ConnectorInputScopesItem[];
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export interface ConnectorIssued {
+  actorId: string;
+  /** Revealed once; never returned by a list or read endpoint */
+  token: string;
+}
+
+export type ConnectorMetadataScopesItem = typeof ConnectorMetadataScopesItem[keyof typeof ConnectorMetadataScopesItem];
+
+
+export const ConnectorMetadataScopesItem = {
+  'tools:list': 'tools:list',
+  'tools:call': 'tools:call',
+} as const;
+
+export type ConnectorMetadataStatus = typeof ConnectorMetadataStatus[keyof typeof ConnectorMetadataStatus];
+
+
+export const ConnectorMetadataStatus = {
+  active: 'active',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+export interface ConnectorMetadata {
+  actorId: string;
+  tokenId: string;
+  name: string;
+  scopes: ConnectorMetadataScopesItem[];
+  createdAt: string;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  status: ConnectorMetadataStatus;
+}
+
 export type ExecutionOutcome = typeof ExecutionOutcome[keyof typeof ExecutionOutcome];
 
 
@@ -326,6 +385,14 @@ export const ExecutionOutcome = {
   SUCCESS: 'SUCCESS',
   DENIED: 'DENIED',
   ERROR: 'ERROR',
+} as const;
+
+export type ExecutionLogEntryActorType = typeof ExecutionLogEntryActorType[keyof typeof ExecutionLogEntryActorType];
+
+
+export const ExecutionLogEntryActorType = {
+  HUMAN: 'HUMAN',
+  CONNECTOR: 'CONNECTOR',
 } as const;
 
 export interface ExecutionLogEntry {
@@ -353,6 +420,8 @@ export interface ExecutionLogEntry {
      * @nullable
      */
   upstreamStatus: number | null;
+  actorType: ExecutionLogEntryActorType;
+  actorLabel: string;
 }
 
 export interface ExecutionLogPage {
@@ -407,6 +476,10 @@ export type UnauthorizedResponse = ErrorResponse;
  * Resource not found
  */
 export type NotFoundResponse = ErrorResponse;
+
+export type RevokeConnector200 = {
+  revoked: boolean;
+};
 
 export type ListExecutionLogsParams = {
 /**

@@ -6,15 +6,19 @@ import { requireAuth } from "../middlewares/auth";
 import mcpRouter from "./mcp";
 import credentialsRouter from "./credentials";
 import executionLogsRouter from "./execution-logs";
+import connectorRouter from "./connector-tokens";
+import { connectorMcpAuth } from "../middlewares/connector-auth";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use("/workspaces/:workspaceId/mcp", connectorMcpAuth);
 router.use(requireAuth);
 router.use(workspaceRouter);
 router.use(catalogRouter);
 router.use(credentialsRouter);
 router.use(executionLogsRouter);
+router.use(connectorRouter);
 router.use(mcpRouter);
 
 export default router;

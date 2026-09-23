@@ -119,6 +119,85 @@ paths:
                 $ref: "#/components/schemas/WorkspaceOverview"
         "404":
           $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/connectors:
+    get:
+      operationId: listConnectors
+      tags: [connectors]
+      summary: List OWNER-managed connector token metadata
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Safe metadata only; never includes a secret or verifier
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConnectorMetadata"
+    post:
+      operationId: createConnector
+      tags: [connectors]
+      summary: Issue a workspace-bound connector token (one-time reveal)
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectorInput"
+      responses:
+        "201":
+          description: Token is returned only in this response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorIssued"
+  /workspaces/{workspaceId}/connectors/{actorId}/rotate:
+    post:
+      operationId: rotateConnector
+      tags: [connectors]
+      summary: Rotate token with five-minute old-token overlap
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: actorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Newly issued token, shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorIssued"
+  /workspaces/{workspaceId}/connectors/{actorId}:
+    delete:
+      operationId: revokeConnector
+      tags: [connectors]
+      summary: Revoke all tokens for this service actor
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: actorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+                required: [revoked]
   /execution-logs:
     get:
       operationId: listExecutionLogs
@@ -922,6 +1001,65 @@ components:
           format: date-time
       required: [id, workspaceId, eventType, resourceType, resourceId, metadata, createdAt]
       additionalProperties: false
+    ConnectorInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            enum: ["tools:list", "tools:call"]
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+      required: [name, scopes]
+      additionalProperties: false
+    ConnectorIssued:
+      type: object
+      properties:
+        actorId:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: Revealed once; never returned by a list or read endpoint
+      required: [actorId, token]
+    ConnectorMetadata:
+      type: object
+      properties:
+        actorId:
+          type: string
+          format: uuid
+        tokenId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: ["tools:list", "tools:call"]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+        revokedAt:
+          type: [string, "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [active, expired, revoked]
+      required: [actorId, tokenId, name, scopes, createdAt, expiresAt, revokedAt, status]
     ExecutionOutcome:
       type: string
       enum: [ATTEMPTED, SUCCESS, DENIED, ERROR]
@@ -961,7 +1099,12 @@ components:
           type: [integer, "null"]
           minimum: 100
           maximum: 599
-      required: [id, createdAt, workspaceId, workspaceName, apiId, apiName, operationId, toolName, method, path, eventType, outcome, upstreamStatus]
+        actorType:
+          type: string
+          enum: [HUMAN, CONNECTOR]
+        actorLabel:
+          type: string
+      required: [id, createdAt, workspaceId, workspaceName, apiId, apiName, operationId, toolName, method, path, eventType, outcome, upstreamStatus, actorType, actorLabel]
       additionalProperties: false
     ExecutionLogPage:
       type: object

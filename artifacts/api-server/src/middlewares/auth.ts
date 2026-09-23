@@ -4,6 +4,9 @@ import { and, eq } from "drizzle-orm";
 import { db, workspaceMembershipsTable } from "@workspace/db";
 
 const actors = new WeakMap<Request, string>();
+export function setConnectorActor(req: Request, memberId: string): void {
+  actors.set(req, memberId);
+}
 
 export function shouldInstallClerkMiddleware(
   nodeEnv: string | undefined,
@@ -24,6 +27,7 @@ export function resolveActorId(
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  if (actors.has(req) && req.path.endsWith("/mcp")) { next(); return; }
   const isTest = process.env.NODE_ENV === "test";
   const testHeader = isTest ? req.header("x-test-user-id") : undefined;
   const auth = isTest ? {} : getAuth(req);

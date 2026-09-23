@@ -43,6 +43,13 @@
       "when": 1790090827746,
       "tag": "0005_spooky_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790160621141,
+      "tag": "0006_powerful_hammerhead",
+      "breakpoints": true
     }
   ]
 }

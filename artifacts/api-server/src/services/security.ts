@@ -28,6 +28,7 @@ export class DatabaseAuditService implements AuditService {
       metadata: {
         ...event.metadata,
         ...(event.actorId ? { actorId: event.actorId } : {}),
+        ...(event.actorId ? { actorType: event.actorId.startsWith("svc:") ? "CONNECTOR" : "HUMAN" } : {}),
       },
     });
   }

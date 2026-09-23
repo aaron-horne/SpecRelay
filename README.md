@@ -65,7 +65,7 @@ optional, BYOK, disabled by default, and advisory; the core runs without one.
 
 ## Identity, tenancy, and credentials
 
-The web console and API currently use Clerk: Clerk's canonical `auth.userId`
+The web console and human API routes use Clerk: Clerk's canonical `auth.userId`
 is the principal, and workspace membership scopes every tenant-owned resource.
 `OWNER` manages APIs, imports, approvals, and credentials; `MEMBER` can use
 only eligible approved tools. Isolation is enforced in application services and
@@ -74,6 +74,21 @@ for outsiders. Self-hosting currently means supplying and operating your own
 Clerk tenant and configuration; a fully self-hosted identity provider is not
 built in. An adapter must preserve the same authenticated principal and
 authorization boundary.
+
+Connector tokens are an opt-in, default-off alternative for **only** the workspace
+MCP endpoint. Set `CONNECTOR_TOKENS_ENABLED=true` after deploying the additive
+database migration to enable OWNER-only creation, rotation, revocation, and
+service-actor MCP access. With the flag off, human Clerk access is unchanged.
+Each connector has a workspace MEMBER identity and an explicit `tools:list`
+and/or `tools:call` scope; it cannot manage APIs or credentials. Create tokens
+from the workspace console, copy the secret once, and supply it as
+`Authorization: Bearer srct_...` to the existing MCP endpoint. The original
+token continues to work for up to five minutes after rotation (or its prior
+expiry, if sooner); revoke to stop new requests immediately. Already dispatched
+calls cannot be recalled. Keep tokens in client secret storage, never in URLs
+or client-side code. Per-instance pre-authentication and per-actor request
+limits return HTTP 429; deployments with multiple API replicas must also
+configure shared ingress limits before enabling the flag.
 
 API-key and Bearer secrets are AES-GCM encrypted at rest, bound to workspace,
 API source, and destination host, and injected only after authorization and
@@ -97,8 +112,9 @@ The endpoint implements the stateless MCP 2026-07-28 Streamable HTTP protocol,
 including `server/discover`, `tools/list`, and `tools/call`, with the required
 request metadata and protocol headers. Only approved tools from the latest
 imported specification are listed. Authentication is provided by the
-application's Clerk-authenticated request context; MCP does not accept
-caller-supplied upstream API credentials or authentication headers.
+application's Clerk-authenticated request context or, when explicitly enabled,
+a workspace-bound connector token. MCP never accepts caller-supplied upstream
+API credentials or forwards inbound authentication headers.
 
 ## Local setup
 

@@ -5,6 +5,7 @@
  * Security-first OpenAPI catalog API for SpecRelay
  * OpenAPI spec version: 0.1.0
  */
+import type { ExecutionLogEntryActorType } from './executionLogEntryActorType';
 import type { ExecutionOutcome } from './executionOutcome';
 
 export interface ExecutionLogEntry {
@@ -32,4 +33,6 @@ export interface ExecutionLogEntry {
      * @nullable
      */
   upstreamStatus: number | null;
+  actorType: ExecutionLogEntryActorType;
+  actorLabel: string;
 }

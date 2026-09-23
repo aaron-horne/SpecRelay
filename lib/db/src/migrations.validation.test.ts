@@ -16,6 +16,7 @@ const migrationNames = [
   "0003_greedy_warstar.sql",
   "0004_unknown_gladiator.sql",
   "0005_spooky_inhumans.sql",
+  "0006_powerful_hammerhead.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -63,7 +64,7 @@ describe("migration reconciliation", () => {
   const integration = required || databaseUrl ? it : it.skip;
 
   integration(
-    "applies 0000-0005 fresh and reapplies 0005",
+    "applies 0000-0006 fresh and reapplies 0005",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
       const client = await pool.connect();
@@ -75,7 +76,7 @@ describe("migration reconciliation", () => {
         const before = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
-        await applyMigrations(client, schema, 5);
+        await applyMigrations(client, schema, 5, 6);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
@@ -84,6 +85,8 @@ describe("migration reconciliation", () => {
           "SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid = 'execution_leases'::regclass",
         );
         expect(lease.rows[0].count).toBe(7);
+        const connector = await client.query("SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid = 'connector_tokens'::regclass");
+        expect(connector.rows[0].count).toBeGreaterThanOrEqual(2);
       } finally {
         await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
         client.release();
@@ -272,8 +275,9 @@ describe("migration reconciliation", () => {
            ORDER BY workspace_id, value`,
         );
 
-        await applyMigrations(client, schema, 5);
-        await applyMigrations(client, schema, 5);
+        await applyMigrations(client, schema, 5, 6);
+        await applyMigrations(client, schema, 5, 6);
+        await applyMigrations(client, schema, 6, 7);
 
         const after = await client.query(`
           SELECT
@@ -336,8 +340,8 @@ describe("migration reconciliation", () => {
         await client.query(`SET search_path TO "${emptySchema}", public`);
         await applyMigrations(client, emptySchema, 0, 5);
         await client.query(`CREATE TABLE execution_leases (id uuid)`);
-        await applyMigrations(client, emptySchema, 5);
-        await applyMigrations(client, emptySchema, 5);
+        await applyMigrations(client, emptySchema, 5, 6);
+        await applyMigrations(client, emptySchema, 5, 6);
         const emptyColumns = await client.query(`
           SELECT count(*)::int AS count
           FROM information_schema.columns
@@ -394,8 +398,8 @@ describe("migration reconciliation", () => {
            VALUES ($1, $2, $3, $4, $5, now(), now() + interval '1 hour')`,
           row,
         );
-        await applyMigrations(client, dataSchema, 5);
-        await applyMigrations(client, dataSchema, 5);
+        await applyMigrations(client, dataSchema, 5, 6);
+        await applyMigrations(client, dataSchema, 5, 6);
         const preserved = await client.query(
           "SELECT id, workspace_id, api_id, specification_id, operation_id FROM execution_leases",
         );
@@ -438,7 +442,7 @@ describe("migration reconciliation", () => {
         await client.query(
           "CREATE VIEW execution_leases AS SELECT 1 AS unrelated_value",
         );
-        await expect(applyMigrations(client, schema, 5)).rejects.toThrow(
+        await expect(applyMigrations(client, schema, 5, 6)).rejects.toThrow(
           /canonical object exists but is not a table/,
         );
       } finally {
@@ -467,7 +471,7 @@ describe("migration reconciliation", () => {
             operation_id uuid, acquired_at text, expires_at timestamptz
           )
         `);
-        await expect(applyMigrations(client, typeSchema, 5)).rejects.toThrow(
+        await expect(applyMigrations(client, typeSchema, 5, 6)).rejects.toThrow(
           /incompatible PostgreSQL type/,
         );
 
@@ -500,7 +504,7 @@ describe("migration reconciliation", () => {
             NOT VALID
         `);
         await expect(
-          applyMigrations(client, constraintSchema, 5),
+          applyMigrations(client, constraintSchema, 5, 6),
         ).rejects.toThrow(
           /violates foreign key constraint|still contains invalid rows|not valid/i,
         );
