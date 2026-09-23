@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Link, useLocation } from "wouter"
-import { Plus, LayoutGrid, Clock } from "lucide-react"
+import { Plus, LayoutGrid, List, Clock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useToast } from "@/hooks/use-toast"
 import { useState } from "react"
 import { formatDistanceToNow } from "date-fns"
@@ -20,13 +21,34 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
 })
 
+const WORKSPACE_VIEW_STORAGE_KEY = "specrelay-workspace-view"
+type WorkspaceView = "card" | "list"
+
 export default function WorkspacesPage() {
   const { data: workspaces, isLoading, error } = useListWorkspaces()
   const createWorkspace = useCreateWorkspace()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
+  const [view, setView] = useState<WorkspaceView>(() => {
+    if (typeof window === "undefined") return "card"
+    try {
+      return window.localStorage.getItem(WORKSPACE_VIEW_STORAGE_KEY) === "list" ? "list" : "card"
+    } catch {
+      return "card"
+    }
+  })
   const [, setLocation] = useLocation()
+
+  function changeView(nextView: string) {
+    if (nextView !== "card" && nextView !== "list") return
+    setView(nextView)
+    try {
+      window.localStorage.setItem(WORKSPACE_VIEW_STORAGE_KEY, nextView)
+    } catch {
+      // Preferences are optional; storage may be unavailable in private browsing.
+    }
+  }
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -60,44 +82,64 @@ export default function WorkspacesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Workspaces</h1>
           <p className="text-muted-foreground mt-1">Import specs and review execution policy.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Workspace
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Workspace</DialogTitle>
-              <DialogDescription>
-                Group OpenAPI specifications and operation policy in one workspace.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Workspace Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. Production Billing" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="submit" disabled={createWorkspace.isPending}>
-                    {createWorkspace.isPending ? "Creating..." : "Create Workspace"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={changeView}
+            variant="outline"
+            size="sm"
+            aria-label="Workspace view"
+            className="rounded-md border border-border bg-card p-1"
+          >
+            <ToggleGroupItem value="card" aria-label="Card view" data-testid="button-workspace-view-card">
+              <LayoutGrid className="mr-2 h-4 w-4" />
+              Card
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view" data-testid="button-workspace-view-list">
+              <List className="mr-2 h-4 w-4" />
+              List
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-new-workspace">
+                <Plus className="mr-2 h-4 w-4" />
+                New Workspace
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Workspace</DialogTitle>
+                <DialogDescription>
+                  Group OpenAPI specifications and operation policy in one workspace.
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Workspace Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Production Billing" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button type="submit" disabled={createWorkspace.isPending}>
+                      {createWorkspace.isPending ? "Creating..." : "Create Workspace"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
@@ -132,22 +174,30 @@ export default function WorkspacesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className={view === "card" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
           {workspaces.map((ws) => (
-            <Card key={ws.id} className="hover-elevate transition-shadow group flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-base break-words">{ws.name}</CardTitle>
-                <CardDescription className="flex items-center mt-2">
+            <Card key={ws.id} className={view === "card"
+              ? "hover-elevate transition-shadow group flex flex-col"
+              : "hover-elevate transition-shadow"}>
+              <CardHeader className={view === "list" ? "flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center" : undefined}>
+                <CardTitle className="min-w-0 flex-1 text-base break-words" data-testid={`text-workspace-name-${ws.id}`}>{ws.name}</CardTitle>
+                <CardDescription className={view === "list" ? "flex shrink-0 items-center" : "flex items-center mt-2"}>
                   <Clock className="w-3.5 h-3.5 mr-1" />
                   Created {formatDistanceToNow(new Date(ws.createdAt))} ago
                 </CardDescription>
+                {view === "list" && (
+                  <Button variant="secondary" className="shrink-0" asChild>
+                    <Link href={`/workspaces/${ws.id}`} data-testid={`link-workspace-${ws.id}`}>Open workspace</Link>
+                  </Button>
+                )}
               </CardHeader>
-              <div className="flex-1" />
-              <CardFooter>
+              {view === "card" && <div className="flex-1" />}
+              {view === "card" && <CardFooter>
                 <Button variant="secondary" className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors" asChild>
                   <Link href={`/workspaces/${ws.id}`}>Open workspace</Link>
                 </Button>
               </CardFooter>
+              }
             </Card>
           ))}
         </div>

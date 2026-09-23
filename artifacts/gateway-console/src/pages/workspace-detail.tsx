@@ -41,6 +41,7 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
 import { ConnectorTokens } from "@/components/connector-tokens"
+import { DeleteWorkspaceDialog } from "@/components/delete-workspace-dialog"
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
@@ -288,6 +289,7 @@ export default function WorkspaceDetailPage() {
           </CardContent>
         </Card>
       </div>
+      {overview.canManage && <DeleteWorkspaceDialog workspaceId={workspaceId} workspaceName={overview.workspace.name} />}
     </div>
   )
 }
