@@ -11,6 +11,13 @@ import {
 } from "@workspace/db";
 import { mapAuditEvent } from "./mappers";
 import { ServiceError } from "./errors";
+import {
+  hasWorkspaceDeletionGuards,
+  workspaceGuardColumnsSql,
+  workspaceGuardConstraintsSql,
+  type GuardColumn,
+  type GuardConstraint,
+} from "./workspace-deletion-guards";
 
 export class WorkspaceService {
   async list(userId: string) {
@@ -148,39 +155,12 @@ export class WorkspaceService {
         );
       }
 
-      // Managed Publish does not install SQL-file triggers. Refuse deletion
-      // until all declarative live-workspace guards have been installed and
-      // validated in this database; a partial schema rollout must fail closed.
+      // Managed Publish does not install migration 0010's SQL triggers.
+      // Require the exact declarative barrier before deleting in production.
       if (process.env.NODE_ENV === "production") {
-        const guardResult = await tx.execute<{
-          foreignKeys: number;
-          childChecks: number;
-          parentChecks: number;
-          parentKeys: number;
-        }>(sql`
-          SELECT
-            count(*) FILTER (WHERE contype = 'f' AND convalidated AND conname = ANY(ARRAY[
-              'workspace_memberships_workspace_live_fk', 'api_sources_workspace_live_fk',
-              'api_spec_versions_workspace_live_fk', 'api_operations_workspace_live_fk',
-              'operation_policies_workspace_live_fk', 'credential_metadata_workspace_live_fk',
-              'connector_actors_workspace_live_fk', 'connector_tokens_workspace_live_fk',
-              'execution_leases_workspace_live_fk'
-            ]))::int AS "foreignKeys",
-            count(*) FILTER (WHERE contype = 'c' AND convalidated AND conname = ANY(ARRAY[
-              'workspace_memberships_live_check', 'api_sources_live_check',
-              'api_spec_versions_live_check', 'api_operations_live_check',
-              'operation_policies_live_check', 'credential_metadata_live_check',
-              'connector_actors_live_check', 'connector_tokens_live_check',
-              'execution_leases_live_check'
-            ]))::int AS "childChecks",
-            count(*) FILTER (WHERE contype = 'c' AND convalidated AND conname = 'workspaces_live_marker_check')::int AS "parentChecks",
-            count(*) FILTER (WHERE contype = 'u' AND conname = 'workspaces_id_live_unique')::int AS "parentKeys"
-          FROM pg_constraint
-          WHERE connamespace = current_schema()::regnamespace
-        `);
-        const guards = guardResult.rows[0];
-        if (guards?.foreignKeys !== 9 || guards.childChecks !== 9 ||
-            guards.parentChecks !== 1 || guards.parentKeys !== 1) {
+        const constraints = await tx.execute<GuardConstraint>(sql.raw(workspaceGuardConstraintsSql));
+        const columns = await tx.execute<GuardColumn>(sql.raw(workspaceGuardColumnsSql));
+        if (!hasWorkspaceDeletionGuards(constraints.rows, columns.rows)) {
           throw new ServiceError(
             "Workspace deletion is unavailable until the database safeguards are installed",
             503,

@@ -75,6 +75,17 @@ Clerk tenant and configuration; a fully self-hosted identity provider is not
 built in. An adapter must preserve the same authenticated principal and
 authorization boundary.
 
+Workspace deletion tombstones the workspace and removes its active operational
+children. In managed Replit production, validated live-workspace composite
+foreign keys and CHECKs prevent new active children from attaching to a
+tombstone; migration `0010`'s write-barrier triggers remain defense-in-depth for
+migration-managed/self-hosted installations, not a managed Publish prerequisite.
+`audit_events` and `connector_security_events` are historical-event exceptions:
+they may retain or receive workspace attribution after tombstoning, but they are
+not active workspace-owned operational resources. Normal tenant routes must
+continue to require a live workspace and must not expose those retained events
+through a deleted workspace. Operators may review retained evidence separately.
+
 Connector tokens are an opt-in, default-off alternative for **only** the workspace
 MCP endpoint. Set `CONNECTOR_TOKENS_ENABLED=true` after deploying the additive
 database migration to enable OWNER-only creation, rotation, revocation, and
