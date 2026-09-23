@@ -87,9 +87,12 @@ continue to require a live workspace and must not expose those retained events
 through a deleted workspace. Operators may review retained evidence separately.
 
 Connector tokens are an opt-in, default-off alternative for **only** the workspace
-MCP endpoint. Set `CONNECTOR_TOKENS_ENABLED=true` after deploying the additive
-database migration to enable OWNER-only creation, rotation, revocation, and
-service-actor MCP access. With the flag off, human Clerk access is unchanged.
+MCP endpoint. Install the required additive schema before setting
+`CONNECTOR_TOKENS_ENABLED=true`: managed Replit production uses a reviewed
+declarative schema Publish, while migration-managed/self-hosted installations
+apply the committed SQL migrations. The flag enables OWNER-only creation,
+rotation, revocation, and service-actor MCP access. With the flag off, human
+Clerk access is unchanged.
 The code and self-hosted default remain off; enabling the flag is an explicit
 deployment configuration choice.
 Each connector has a workspace MEMBER identity and an explicit `tools:list`
@@ -102,9 +105,9 @@ calls cannot be recalled. Keep tokens in client secret storage, never in URLs
 or client-side code. PostgreSQL atomically enforces the existing limits across
 API replicas and restarts: 600/IP and 60/IP-plus-lookup authentication attempts,
 and 120/workspace-actor requests per 60-second window. Exhaustion returns HTTP
-429; database failures do not allow unmetered requests. Apply all committed
-migrations before enabling the flag. Expired rate-limit buckets are eventually
-removed after one day. The append-only `connector_security_events` table records
+429; database failures do not allow unmetered requests. Expired rate-limit
+buckets are eventually removed after one day. The append-only
+`connector_security_events` table records
 failed authentication and rate-limit categories (one event per exhausted
 limiter bucket/window), with verified workspace/actor IDs only when known.
 It contains no tokens, lookup IDs, IP addresses, headers,
@@ -158,6 +161,8 @@ migrations for local development and CI. Treat migrations as append-only and
 validate both a fresh database and an established database with tenant data
 before release; do not reset production data. `pnpm run migration:validate`
 requires `DATABASE_URL` and fails rather than skipping its PostgreSQL fixtures.
+Managed Replit Publish applies the reviewed declarative schema diff to production;
+it does not replay the committed SQL migration files.
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Further reading

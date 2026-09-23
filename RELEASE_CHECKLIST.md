@@ -1,7 +1,8 @@
 # Release checklist
 
-This checklist records release readiness work; checking an item does not imply
-that deployment has occurred.
+This checklist records release readiness work. Except where an item explicitly
+records a production Publish or smoke check, checking it does not imply
+deployment; completed items do not imply general production readiness.
 
 ## Source and CI
 
@@ -26,16 +27,17 @@ that deployment has occurred.
 - [ ] Keep Connector Tokens default-off in tracked configuration; confirm any
       production opt-in is stored in that deployment's untracked secrets,
       not in the public repository or a local `.replit` override.
-- [ ] Before publishing workspace deletion on managed PostgreSQL, stage the
-      live-workspace key and child markers/checks in a separate schema Publish,
-      then publish the nine live-workspace foreign keys only after the parent
-      UNIQUE key exists in production. The current combined schema preview
-      orders those foreign keys before their referenced UNIQUE key; do not
-      publish that combined preview. SQL migration files' trigger DDL is not
-      included in the managed Publish diff. Deletion must fail closed until
-      production shows all nine validated foreign keys and checks, the parent
-      marker check and key, and the seven existing validated tenant foreign
-      keys. Do not select a table-truncation option to add the UNIQUE key.
+- [x] Stage 1 of the managed workspace-deletion rollout was Published and
+      verified in production: the parent live-marker CHECK and composite UNIQUE
+      key, plus nine child live-marker columns and CHECKs, preceded the child
+      foreign keys.
+- [x] Stage 2 was Published separately with exactly nine live-workspace
+      composite foreign keys. Production catalog checks confirmed all nine
+      validated and enabled, the Stage 1 foundation intact, and all seven older
+      tenant-isolation foreign keys still validated. The hardened semantic
+      deletion-readiness gate now passes. Managed Publish did not replay the
+      SQL migration files' defense-in-depth trigger DDL; no table truncation
+      was selected for either stage.
 - [ ] Run tenant-isolation tests for workspace membership, resource IDs,
       roles, catalog, credentials, audit data, and MCP execution.
 - [ ] Verify production Clerk configuration and canonical `auth.userId`
@@ -66,8 +68,21 @@ readiness:
       `invalid_credential` security evidence, with no post-revocation scope
       denial or execution-attempt audit.
 
-This smoke test does not complete the remaining CI, migration, security review,
-release, publication, or broader integration gates below.
+This smoke test does not complete the remaining source/CI, security review,
+public-release, or broader integration gates below.
+
+## Workspace-deletion production smoke evidence
+
+The following controlled production checks succeeded. They validate these
+specific flows, not general production readiness:
+
+- [x] OWNER-confirmed workspace deletion succeeded with a disposable test
+      workspace; this is not a test of every tenant or operational state.
+- [x] Retained connector security history survived workspace deletion while
+      active connector identity and token records were removed.
+
+These checks do not complete the remaining public-release and broader
+integration gates below.
 
 ## Public-release checks
 
