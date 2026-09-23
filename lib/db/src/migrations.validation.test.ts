@@ -19,6 +19,7 @@ const migrationNames = [
   "0005_spooky_inhumans.sql",
   "0006_powerful_hammerhead.sql",
   "0007_tricky_johnny_blaze.sql",
+  "0008_repair_connector_safeguards.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -42,6 +43,55 @@ async function applyMigrations(
       if (statement.trim()) await client.query(statement);
     }
   }
+}
+
+async function expectConnectorSafeguards(client: pg.PoolClient, validated: boolean) {
+  const indexes = await client.query<{
+    indexname: string;
+    indisunique: boolean;
+    columns: string[];
+  }>(`
+    SELECT cls.relname AS indexname, i.indisunique,
+      (SELECT array_agg(a.attname::text ORDER BY k.ord)
+       FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum) AS columns
+    FROM pg_index i
+    JOIN pg_class cls ON cls.oid = i.indexrelid
+    WHERE cls.relnamespace = current_schema()::regnamespace
+      AND cls.relname = ANY(ARRAY[
+        'connector_actors_workspace_id_unique', 'connector_actors_member_unique',
+        'connector_tokens_lookup_unique', 'connector_tokens_workspace_actor_idx'
+      ])
+      AND i.indisvalid AND i.indisready
+    ORDER BY cls.relname
+  `);
+  expect(indexes.rows).toEqual([
+    { indexname: "connector_actors_member_unique", indisunique: true, columns: ["workspace_id", "member_id"] },
+    { indexname: "connector_actors_workspace_id_unique", indisunique: true, columns: ["workspace_id", "id"] },
+    { indexname: "connector_tokens_lookup_unique", indisunique: true, columns: ["lookup_id"] },
+    { indexname: "connector_tokens_workspace_actor_idx", indisunique: false, columns: ["workspace_id", "actor_id"] },
+  ]);
+  const actorUnique = await client.query<{ conname: string; definition: string }>(`
+    SELECT c.conname, pg_get_constraintdef(c.oid) AS definition
+    FROM pg_constraint c
+    WHERE c.conrelid = 'connector_actors'::regclass AND c.contype = 'u'
+      AND c.conname = 'connector_actors_workspace_id_unique'
+      AND c.conindid = to_regclass(format('%I.%I', current_schema(), c.conname))
+  `);
+  expect(actorUnique.rows).toEqual([{
+    conname: "connector_actors_workspace_id_unique",
+    definition: "UNIQUE (workspace_id, id)",
+  }]);
+  const fk = await client.query<{ conname: string; convalidated: boolean; definition: string }>(`
+    SELECT conname, convalidated, pg_get_constraintdef(oid) AS definition
+    FROM pg_constraint
+    WHERE conrelid = 'connector_tokens'::regclass AND contype = 'f'
+  `);
+  expect(fk.rows).toEqual([{
+    conname: "connector_tokens_workspace_id_actor_id_connector_actors_workspace_id_id_fk".slice(0, 63),
+    convalidated: validated,
+    definition: `FOREIGN KEY (workspace_id, actor_id) REFERENCES connector_actors(workspace_id, id) ON DELETE CASCADE${validated ? "" : " NOT VALID"}`,
+  }]);
 }
 
 describe("migration reconciliation", () => {
@@ -129,6 +179,17 @@ describe("migration reconciliation", () => {
             .digest("hex"),
           created_at: String(journal.entries[i]?.when),
         }))));
+        const client = await pool.connect();
+        try {
+          const orphaned = await client.query<{ count: string }>(`
+            SELECT count(*) AS count FROM connector_tokens t
+            LEFT JOIN connector_actors a ON a.workspace_id = t.workspace_id AND a.id = t.actor_id
+            WHERE a.id IS NULL
+          `);
+          await expectConnectorSafeguards(client, Number(orphaned.rows[0]?.count) === 0);
+        } finally {
+          client.release();
+        }
       } finally {
         await pool.end();
       }
@@ -137,7 +198,7 @@ describe("migration reconciliation", () => {
   );
 
   integration(
-    "applies 0000-0007 fresh and reapplies additive migrations",
+    "applies 0000-0008 fresh and reapplies additive migrations",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
       const client = await pool.connect();
@@ -146,6 +207,7 @@ describe("migration reconciliation", () => {
         await client.query(`CREATE SCHEMA "${schema}"`);
         await client.query(`SET search_path TO "${schema}", public`);
         await applyMigrations(client, schema);
+        await expectConnectorSafeguards(client, true);
         const tenantKeys = await client.query<{ count: number }>(`
           SELECT count(*)::int AS count FROM pg_constraint
           WHERE connamespace = current_schema()::regnamespace
@@ -166,6 +228,8 @@ describe("migration reconciliation", () => {
         );
         await applyMigrations(client, schema, 5, 6);
         await applyMigrations(client, schema, 7, 8);
+        await applyMigrations(client, schema, 8, 9);
+        await expectConnectorSafeguards(client, true);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
@@ -206,6 +270,55 @@ describe("migration reconciliation", () => {
           { table_name: "connector_security_events", column_name: "workspace_id", is_nullable: "YES" },
           { table_name: "connector_security_events", column_name: "actor_id", is_nullable: "YES" },
         ]);
+      } finally {
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+        client.release();
+        await pool.end();
+      }
+    },
+    30_000,
+  );
+
+  integration(
+    "restores missing connector safeguards without discarding orphaned tokens",
+    async () => {
+      const pool = new Pool({ connectionString: databaseUrl });
+      const client = await pool.connect();
+      const schema = `migration_validation_connector_drift_${process.pid}_${Date.now()}`;
+      try {
+        await client.query(`CREATE SCHEMA "${schema}"`);
+        await client.query(`SET search_path TO "${schema}", public`);
+        await applyMigrations(client, schema, 0, 8);
+        await client.query(`
+          ALTER TABLE connector_tokens
+            DROP CONSTRAINT connector_tokens_workspace_id_actor_id_connector_actors_workspace_id_id_fk
+        `);
+        for (const name of [
+          "connector_actors_workspace_id_unique", "connector_actors_member_unique",
+          "connector_tokens_lookup_unique", "connector_tokens_workspace_actor_idx",
+        ]) {
+          await client.query(`DROP INDEX "${schema}"."${name}"`);
+        }
+        await client.query(`
+          INSERT INTO connector_tokens (id, workspace_id, actor_id, lookup_id, verifier, scopes)
+          VALUES ('a1000000-0000-4000-8000-000000000001',
+                  'a2000000-0000-4000-8000-000000000001',
+                  'a3000000-0000-4000-8000-000000000001',
+                  'orphan-fixture', 'fixture-verifier', '[]')
+        `);
+        await applyMigrations(client, schema, 8, 9);
+        await applyMigrations(client, schema, 8, 9);
+        await expectConnectorSafeguards(client, false);
+        const preserved = await client.query<{ count: number }>(
+          "SELECT count(*)::int AS count FROM connector_tokens WHERE lookup_id = 'orphan-fixture'",
+        );
+        expect(preserved.rows[0]?.count).toBe(1);
+        await expect(client.query(`
+          INSERT INTO connector_tokens (workspace_id, actor_id, lookup_id, verifier, scopes)
+          VALUES ('a2000000-0000-4000-8000-000000000001',
+                  'a3000000-0000-4000-8000-000000000001',
+                  'new-orphan', 'fixture-verifier', '[]')
+        `)).rejects.toThrow();
       } finally {
         await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
         client.release();
