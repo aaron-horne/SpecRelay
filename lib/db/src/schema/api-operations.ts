@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   foreignKey,
   index,
   jsonb,
@@ -10,6 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { apiSourcesTable } from "./api-sources";
 import { apiSpecVersionsTable } from "./api-spec-versions";
 import { workspacesTable } from "./workspaces";
@@ -28,6 +30,7 @@ export const apiOperationsTable = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspacesTable.id, { onDelete: "cascade" }),
+    workspaceIsLive: boolean("workspace_is_live").notNull().default(true),
     apiId: uuid("api_id")
       .notNull()
       .references(() => apiSourcesTable.id, { onDelete: "cascade" }),
@@ -108,6 +111,8 @@ export const apiOperationsTable = pgTable(
       foreignColumns: [apiSourcesTable.workspaceId, apiSourcesTable.id],
       name: "api_operations_workspace_api_fk",
     }).onDelete("cascade"),
+    check("api_operations_live_check", sql`${table.workspaceIsLive} = true`),
+    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "api_operations_workspace_live_fk" }).onDelete("cascade"),
     foreignKey({
       columns: [table.workspaceId, table.apiId, table.specificationId],
       foreignColumns: [

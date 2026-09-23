@@ -19,6 +19,8 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import app from "./app";
 
+const sameOrigin = "http://127.0.0.1";
+
 function mcp(workspaceId: string, userId: string, method: string) {
   return request(app)
     .post(`/api/workspaces/${workspaceId}/mcp`)
@@ -40,12 +42,28 @@ describe.sequential("workspace deletion security", () => {
     const workspaceId = created.body.id as string;
     await db.insert(workspaceMembershipsTable).values({ workspaceId, userId: member, role: "MEMBER" });
 
-    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", member)
+    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", member).set("origin", sameOrigin)
       .send({ name }).expect(403);
-    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", outsider)
+    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", outsider).set("origin", sameOrigin)
       .send({ name }).expect(404);
-    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner)
+    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner).set("origin", sameOrigin)
       .send({ name: `${name}-wrong` }).expect(400);
+  });
+
+  it("rejects missing, null, malformed, and cross-site origins before deletion", async () => {
+    const owner = `delete-csrf-${randomUUID()}`;
+    const name = `CSRF ${randomUUID()}`;
+    const workspaceId = (await request(app).post("/api/workspaces").set("x-test-user-id", owner)
+      .send({ name }).expect(201)).body.id as string;
+    const forged = () => request(app).delete(`/api/workspaces/${workspaceId}`)
+      .set("x-test-user-id", owner).send({ name });
+
+    await forged().expect(403);
+    await forged().set("origin", "null").expect(403);
+    await forged().set("origin", "https://attacker.example").expect(403);
+    await forged().set("origin", "not-an-origin").expect(403);
+
+    await request(app).get(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner).expect(200);
   });
 
   it("tombstones the workspace, cleans active data, and retains truthful history", async () => {
@@ -67,7 +85,7 @@ describe.sequential("workspace deletion security", () => {
       actorId: securityActorId,
     });
 
-    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner)
+    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner).set("origin", sameOrigin)
       .send({ name }).expect(204);
 
     await request(app).get("/api/workspaces").set("x-test-user-id", owner).expect(200)
@@ -128,7 +146,7 @@ describe.sequential("workspace deletion security", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner)
+    await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner).set("origin", sameOrigin)
       .send({ name }).expect(409);
     const [busyWorkspace] = await db.select().from(workspacesTable).where(eq(workspacesTable.id, workspaceId));
     expect(busyWorkspace?.deletedAt).toBeNull();
@@ -162,7 +180,7 @@ describe.sequential("workspace deletion security", () => {
           AND NEW.workspace_id = '${workspaceId}'::uuid)
         EXECUTE FUNCTION ${functionName}()`));
 
-      await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner)
+      await request(app).delete(`/api/workspaces/${workspaceId}`).set("x-test-user-id", owner).set("origin", sameOrigin)
         .send({ name }).expect(500);
       const [workspace] = await db.select().from(workspacesTable).where(eq(workspacesTable.id, workspaceId));
       expect(workspace?.deletedAt).toBeNull();

@@ -78,6 +78,13 @@
       "when": 1790171000000,
       "tag": "0010_reject_deleted_workspace_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790172000000,
+      "tag": "0011_workspace_live_key_guards",
+      "breakpoints": true
     }
   ]
 }

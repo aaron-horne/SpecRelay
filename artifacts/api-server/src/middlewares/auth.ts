@@ -40,6 +40,67 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
+function configuredPublicOrigins(): Set<string> {
+  if (process.env.NODE_ENV === "test") return new Set();
+  const configured = process.env.REPLIT_DOMAINS;
+  if (!configured) return new Set();
+  return new Set(
+    configured.split(",").flatMap((value) => {
+      const host = value.trim();
+      if (!host) return [];
+      try {
+        const url = new URL(host.includes("://") ? host : `https://${host}`);
+        return [url.origin];
+      } catch {
+        return [];
+      }
+    }),
+  );
+}
+
+/**
+ * DELETE workspace is a browser cookie-bearing action. Require Origin rather
+ * than falling back to Referer or SameSite cookies. In production the
+ * expected origin comes from Replit's runtime-managed public domains, not
+ * request-controlled forwarding headers.
+ */
+export function requireSameOrigin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const rawOrigin = req.header("origin");
+  if (!rawOrigin || rawOrigin === "null") {
+    res.status(403).json({ error: "Valid same-origin request required", code: "CSRF_ORIGIN_INVALID" });
+    return;
+  }
+  let origin: URL;
+  try {
+    origin = new URL(rawOrigin);
+    if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password ||
+      origin.pathname !== "/" || origin.search || origin.hash) {
+      throw new Error("invalid origin");
+    }
+  } catch {
+    res.status(403).json({ error: "Valid same-origin request required", code: "CSRF_ORIGIN_INVALID" });
+    return;
+  }
+
+  const expected = configuredPublicOrigins();
+  // Supertest has no Replit runtime domain. Keep this test-only fallback
+  // request-local; production never trusts a forwarded host supplied by a
+  // caller when the managed public-domain value is unavailable.
+  if (expected.size === 0 && process.env.NODE_ENV === "test") {
+    expected.add(`${req.protocol}://${req.get("host")}`);
+    expected.add(`${req.protocol}://${req.hostname}`);
+  }
+  if (!expected.has(origin.origin)) {
+    res.status(403).json({ error: "Valid same-origin request required", code: "CSRF_ORIGIN_INVALID" });
+    return;
+  }
+  next();
+}
+
 export function actorId(req: Request): string {
   const id = actors.get(req);
   if (!id) throw new Error("Authenticated actor missing");

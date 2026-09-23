@@ -10,7 +10,7 @@ import {
   ListWorkspacesResponse,
 } from "@workspace/api-zod";
 import { WorkspaceService } from "../services/workspaces";
-import { actorId } from "../middlewares/auth";
+import { actorId, requireSameOrigin } from "../middlewares/auth";
 
 const router: IRouter = Router();
 const service = new WorkspaceService();
@@ -42,7 +42,7 @@ router.get("/workspaces/:workspaceId", async (req, res): Promise<void> => {
   res.json(GetWorkspaceResponse.parse(await service.get(params.data.workspaceId, actorId(req))));
 });
 
-router.delete("/workspaces/:workspaceId", async (req, res): Promise<void> => {
+router.delete("/workspaces/:workspaceId", requireSameOrigin, async (req, res): Promise<void> => {
   const params = GetWorkspaceParams.safeParse(req.params);
   const input = DeleteWorkspaceBody.strict().safeParse(req.body);
   if (!params.success) {

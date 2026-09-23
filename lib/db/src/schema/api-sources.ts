@@ -1,5 +1,8 @@
 import {
   index,
+  boolean,
+  check,
+  foreignKey,
   pgTable,
   text,
   timestamp,
@@ -7,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { sql } from "drizzle-orm";
 import { workspacesTable } from "./workspaces";
 
 export const apiSourcesTable = pgTable(
@@ -16,6 +20,7 @@ export const apiSourcesTable = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspacesTable.id, { onDelete: "cascade" }),
+    workspaceIsLive: boolean("workspace_is_live").notNull().default(true),
     name: text("name").notNull(),
     description: text("description"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -33,6 +38,8 @@ export const apiSourcesTable = pgTable(
       table.name,
     ),
     uniqueIndex("api_sources_workspace_id_unique").on(table.workspaceId, table.id),
+    check("api_sources_live_check", sql`${table.workspaceIsLive} = true`),
+    foreignKey({ columns: [table.workspaceId, table.workspaceIsLive], foreignColumns: [workspacesTable.id, workspacesTable.isLive], name: "api_sources_workspace_live_fk" }).onDelete("cascade"),
   ],
 );
 

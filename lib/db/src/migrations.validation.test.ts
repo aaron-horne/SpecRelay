@@ -22,6 +22,7 @@ const migrationNames = [
   "0008_repair_connector_safeguards.sql",
   "0009_workspace_deletion_tombstone.sql",
   "0010_reject_deleted_workspace_writes.sql",
+  "0011_workspace_live_key_guards.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -88,12 +89,45 @@ async function expectConnectorSafeguards(client: pg.PoolClient, validated: boole
     SELECT conname, convalidated, pg_get_constraintdef(oid) AS definition
     FROM pg_constraint
     WHERE conrelid = 'connector_tokens'::regclass AND contype = 'f'
+      AND conname NOT LIKE '%_workspace_live_fk'
   `);
   expect(fk.rows).toEqual([{
     conname: "connector_tokens_workspace_id_actor_id_connector_actors_workspace_id_id_fk".slice(0, 63),
     convalidated: validated,
     definition: `FOREIGN KEY (workspace_id, actor_id) REFERENCES connector_actors(workspace_id, id) ON DELETE CASCADE${validated ? "" : " NOT VALID"}`,
   }]);
+}
+
+async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 9) {
+  const guards = await client.query<{ fks: number; checks: number }>(`
+    SELECT
+      (SELECT count(*)::int FROM pg_constraint
+       WHERE connamespace = current_schema()::regnamespace AND contype = 'f'
+         AND conname = ANY(ARRAY[
+           'workspace_memberships_workspace_live_fk', 'api_sources_workspace_live_fk',
+           'api_spec_versions_workspace_live_fk', 'api_operations_workspace_live_fk',
+           'operation_policies_workspace_live_fk', 'credential_metadata_workspace_live_fk',
+           'connector_actors_workspace_live_fk', 'connector_tokens_workspace_live_fk',
+           'execution_leases_workspace_live_fk'
+         ]) AND convalidated) AS fks,
+      (SELECT count(*)::int FROM pg_constraint
+       WHERE connamespace = current_schema()::regnamespace AND contype = 'c'
+         AND conname = ANY(ARRAY[
+           'workspace_memberships_live_check', 'api_sources_live_check',
+           'api_spec_versions_live_check', 'api_operations_live_check',
+           'operation_policies_live_check', 'credential_metadata_live_check',
+           'connector_actors_live_check', 'connector_tokens_live_check',
+           'execution_leases_live_check'
+         ])) AS checks
+  `);
+  expect(guards.rows[0]?.fks).toBe(validated);
+  expect(guards.rows[0]?.checks).toBe(9);
+  const parent = await client.query<{ count: number }>(`
+    SELECT count(*)::int AS count FROM pg_constraint
+    WHERE connamespace = current_schema()::regnamespace
+      AND conname IN ('workspaces_id_live_unique', 'workspaces_live_marker_check')
+  `);
+  expect(parent.rows[0]?.count).toBe(2);
 }
 
 describe("migration reconciliation", () => {
@@ -175,6 +209,7 @@ describe("migration reconciliation", () => {
         const recorded = await pool.query<{ hash: string; created_at: string }>(
           "SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
         );
+        expect(recorded.rows).toHaveLength(migrationNames.length);
         expect(recorded.rows).toEqual(await Promise.all(migrationNames.map(async (name, i) => ({
           hash: createHash("sha256")
             .update(await readFile(path.join(migrationsDirectory, name)))
@@ -200,6 +235,50 @@ describe("migration reconciliation", () => {
   );
 
   integration(
+    "backfills a pre-0011 tombstone and rejects live-marker bypasses",
+    async () => {
+      const pool = new Pool({ connectionString: databaseUrl });
+      const client = await pool.connect();
+      const schema = `migration_validation_tombstone_${process.pid}_${Date.now()}`;
+      const tombstoneId = "f1000000-0000-4000-8000-000000000001";
+      const liveId = "f1000000-0000-4000-8000-000000000002";
+      try {
+        await client.query(`CREATE SCHEMA "${schema}"`);
+        await client.query(`SET search_path TO "${schema}", public`);
+        // 0010 is present, but 0011 has not yet added the live marker.
+        await applyMigrations(client, schema, 0, 11);
+        await client.query(
+          "INSERT INTO workspaces (id, name, deleted_at) VALUES ($1, 'Legacy tombstone', now()), ($2, 'Live workspace', null)",
+          [tombstoneId, liveId],
+        );
+
+        await applyMigrations(client, schema, 11, 12);
+        const marker = await client.query<{ is_live: boolean }>(
+          "SELECT is_live FROM workspaces WHERE id = $1",
+          [tombstoneId],
+        );
+        expect(marker.rows).toEqual([{ is_live: false }]);
+        await expectWorkspaceLiveGuards(client);
+
+        // A false child marker cannot be used to evade the live-key guard.
+        await expect(client.query(
+          "INSERT INTO workspace_memberships (workspace_id, workspace_is_live, user_id, role) VALUES ($1, false, 'bypass-user', 'MEMBER')",
+          [liveId],
+        )).rejects.toThrow();
+        await expect(client.query(
+          "INSERT INTO workspace_memberships (workspace_id, user_id, role) VALUES ($1, 'deleted-user', 'MEMBER')",
+          [tombstoneId],
+        )).rejects.toThrow();
+      } finally {
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+        client.release();
+        await pool.end();
+      }
+    },
+    30_000,
+  );
+
+  integration(
     "applies all migrations fresh and reapplies additive migrations",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
@@ -210,6 +289,7 @@ describe("migration reconciliation", () => {
         await client.query(`SET search_path TO "${schema}", public`);
         await applyMigrations(client, schema);
         await expectConnectorSafeguards(client, true);
+        await expectWorkspaceLiveGuards(client);
         const deletedWorkspaceTriggers = await client.query<{ count: number }>(`
           SELECT count(*)::int AS count
           FROM pg_trigger
@@ -222,7 +302,7 @@ describe("migration reconciliation", () => {
         `);
         expect(deletedWorkspaceTriggers.rows[0]?.count).toBe(9);
         await client.query(
-          "INSERT INTO workspaces (id, name, deleted_at) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now())",
+          "INSERT INTO workspaces (id, name, deleted_at, is_live) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now(), false)",
         );
         await expect(client.query(
           "INSERT INTO workspace_memberships (workspace_id, user_id, role) VALUES ('f0000000-0000-4000-8000-000000000001', 'fixture-user', 'MEMBER')",
@@ -247,8 +327,9 @@ describe("migration reconciliation", () => {
         );
         await applyMigrations(client, schema, 5, 6);
         await applyMigrations(client, schema, 7, 8);
-        await applyMigrations(client, schema, 8, 11);
+        await applyMigrations(client, schema, 8, 12);
         await expectConnectorSafeguards(client, true);
+        await expectWorkspaceLiveGuards(client);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
@@ -256,7 +337,7 @@ describe("migration reconciliation", () => {
         const lease = await client.query(
           "SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid = 'execution_leases'::regclass",
         );
-        expect(lease.rows[0].count).toBe(7);
+        expect(lease.rows[0].count).toBe(9);
         const connector = await client.query("SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid = 'connector_tokens'::regclass");
         expect(connector.rows[0].count).toBeGreaterThanOrEqual(2);
         const connectorIndexes = await client.query(`
@@ -325,9 +406,10 @@ describe("migration reconciliation", () => {
                   'a3000000-0000-4000-8000-000000000001',
                   'orphan-fixture', 'fixture-verifier', '[]')
         `);
-        await applyMigrations(client, schema, 8, 11);
-        await applyMigrations(client, schema, 8, 11);
+        await applyMigrations(client, schema, 8, 12);
+        await applyMigrations(client, schema, 8, 12);
         await expectConnectorSafeguards(client, false);
+        await expectWorkspaceLiveGuards(client, 8);
         const preserved = await client.query<{ count: number }>(
           "SELECT count(*)::int AS count FROM connector_tokens WHERE lookup_id = 'orphan-fixture'",
         );

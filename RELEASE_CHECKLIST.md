@@ -23,6 +23,19 @@ that deployment has occurred.
       reapplication/idempotence.
 - [ ] Validate migrations on an established schema with linked tenant data and
       partial/legacy fixtures; confirm no unsafe reset or data loss.
+- [ ] Keep Connector Tokens default-off in tracked configuration; confirm any
+      production opt-in is stored in that deployment's untracked secrets,
+      not in the public repository or a local `.replit` override.
+- [ ] Before publishing workspace deletion on managed PostgreSQL, stage the
+      live-workspace key and child markers/checks in a separate schema Publish,
+      then publish the nine live-workspace foreign keys only after the parent
+      UNIQUE key exists in production. The current combined schema preview
+      orders those foreign keys before their referenced UNIQUE key; do not
+      publish that combined preview. SQL migration files' trigger DDL is not
+      included in the managed Publish diff. Deletion must fail closed until
+      production shows all nine validated foreign keys and checks, the parent
+      marker check and key, and the seven existing validated tenant foreign
+      keys. Do not select a table-truncation option to add the UNIQUE key.
 - [ ] Run tenant-isolation tests for workspace membership, resource IDs,
       roles, catalog, credentials, audit data, and MCP execution.
 - [ ] Verify production Clerk configuration and canonical `auth.userId`
