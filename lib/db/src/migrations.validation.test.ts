@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -68,6 +69,74 @@ describe("migration reconciliation", () => {
   const integration = required || databaseUrl ? it : it.skip;
 
   integration(
+    "keeps the development tenant keys and committed migration journal intact",
+    async () => {
+      const pool = new Pool({ connectionString: databaseUrl });
+      try {
+        const keys = await pool.query<{
+          conname: string;
+          convalidated: boolean;
+          definition: string;
+        }>(`
+          SELECT conname, convalidated, pg_get_constraintdef(oid) AS definition
+          FROM pg_constraint
+          WHERE connamespace = 'public'::regnamespace AND contype = 'f'
+            AND conname = ANY(ARRAY[
+              'api_operations_workspace_api_fk',
+              'api_operations_workspace_specification_fk',
+              'api_spec_versions_workspace_api_fk',
+              'credential_metadata_workspace_api_fk',
+              'execution_leases_workspace_api_spec_operation_fk',
+              'execution_leases_workspace_specification_fk',
+              'operation_policies_workspace_operation_fk'
+            ])
+          ORDER BY conname
+        `);
+        const expected = [
+          ["api_operations_workspace_api_fk", "FOREIGN KEY (workspace_id, api_id) REFERENCES api_sources(workspace_id, id) ON DELETE CASCADE"],
+          ["api_operations_workspace_specification_fk", "FOREIGN KEY (workspace_id, api_id, specification_id) REFERENCES api_spec_versions(workspace_id, api_id, id) ON DELETE CASCADE"],
+          ["api_spec_versions_workspace_api_fk", "FOREIGN KEY (workspace_id, api_id) REFERENCES api_sources(workspace_id, id) ON DELETE CASCADE"],
+          ["credential_metadata_workspace_api_fk", "FOREIGN KEY (workspace_id, api_id) REFERENCES api_sources(workspace_id, id) ON DELETE CASCADE"],
+          ["execution_leases_workspace_api_spec_operation_fk", "FOREIGN KEY (workspace_id, api_id, specification_id, operation_id) REFERENCES api_operations(workspace_id, api_id, specification_id, id) ON DELETE CASCADE"],
+          ["execution_leases_workspace_specification_fk", "FOREIGN KEY (workspace_id, api_id, specification_id) REFERENCES api_spec_versions(workspace_id, api_id, id) ON DELETE CASCADE"],
+          ["operation_policies_workspace_operation_fk", "FOREIGN KEY (workspace_id, operation_id) REFERENCES api_operations(workspace_id, id) ON DELETE CASCADE"],
+        ];
+        expect(keys.rows.map(({ conname, definition }) => [
+          conname, definition.replace(/ NOT VALID$/, ""),
+        ])).toEqual(expected);
+
+        const invalid = await pool.query<{ count: string }>(`
+          SELECT count(*) AS count
+          FROM api_spec_versions s
+          LEFT JOIN api_sources a ON a.workspace_id = s.workspace_id AND a.id = s.api_id
+          WHERE a.id IS NULL
+        `);
+        const unvalidated = keys.rows.filter((key) => !key.convalidated).map((key) => key.conname);
+        // The preserved development test fixture pre-dates this FK. NOT VALID
+        // still enforces new writes; fresh migrated databases must validate all seven.
+        expect(unvalidated).toEqual(Number(invalid.rows[0]?.count) > 0
+          ? ["api_spec_versions_workspace_api_fk"] : []);
+
+        const journal = JSON.parse(
+          await readFile(path.join(migrationsDirectory, "meta/_journal.json"), "utf8"),
+        ) as { entries: Array<{ tag: string; when: number }> };
+        const recorded = await pool.query<{ hash: string; created_at: string }>(
+          "SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
+        );
+        expect(recorded.rows).toEqual(await Promise.all(migrationNames.map(async (name, i) => ({
+          hash: createHash("sha256")
+            .update(await readFile(path.join(migrationsDirectory, name)))
+            .digest("hex"),
+          created_at: String(journal.entries[i]?.when),
+        }))));
+      } finally {
+        await pool.end();
+      }
+    },
+    30_000,
+  );
+
+  integration(
     "applies 0000-0007 fresh and reapplies additive migrations",
     async () => {
       const pool = new Pool({ connectionString: databaseUrl });
@@ -77,6 +146,21 @@ describe("migration reconciliation", () => {
         await client.query(`CREATE SCHEMA "${schema}"`);
         await client.query(`SET search_path TO "${schema}", public`);
         await applyMigrations(client, schema);
+        const tenantKeys = await client.query<{ count: number }>(`
+          SELECT count(*)::int AS count FROM pg_constraint
+          WHERE connamespace = current_schema()::regnamespace
+            AND contype = 'f' AND convalidated
+            AND conname = ANY(ARRAY[
+              'api_operations_workspace_api_fk',
+              'api_operations_workspace_specification_fk',
+              'api_spec_versions_workspace_api_fk',
+              'credential_metadata_workspace_api_fk',
+              'execution_leases_workspace_api_spec_operation_fk',
+              'execution_leases_workspace_specification_fk',
+              'operation_policies_workspace_operation_fk'
+            ])
+        `);
+        expect(tenantKeys.rows[0]?.count).toBe(7);
         const before = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );
