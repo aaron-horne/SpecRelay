@@ -21,6 +21,7 @@ import { ServiceError } from "./errors";
 
 const PROVIDER = "jev";
 const TEST_COOLDOWN_MS = 30_000;
+const WORKSPACE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ProviderRow = typeof semanticProviderConfigsTable.$inferSelect;
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -29,12 +30,29 @@ function featureEnabled(): boolean {
   return process.env.SEMANTIC_PROVIDERS_ENABLED === "true";
 }
 
-function requireFeature(): void {
+function rolloutEnabled(workspaceId: string): boolean {
+  if (!featureEnabled()) return false;
+  const raw = process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS;
+  if (!raw) return false;
+  const ids = raw.split(",").map((id) => id.trim());
+  // A malformed operator setting denies all workspaces rather than broadening access.
+  return ids.every((id) => WORKSPACE_ID_PATTERN.test(id)) &&
+    ids.some((id) => id.toLowerCase() === workspaceId.toLowerCase());
+}
+
+function requireFeature(workspaceId: string): void {
   if (!featureEnabled()) {
     throw new ServiceError(
       "Semantic provider tests and readiness are disabled",
       503,
       "SEMANTIC_PROVIDERS_DISABLED",
+    );
+  }
+  if (!rolloutEnabled(workspaceId)) {
+    throw new ServiceError(
+      "Connection tests and readiness are not available for this workspace",
+      503,
+      "SEMANTIC_PROVIDER_WORKSPACE_NOT_ALLOWED",
     );
   }
 }
@@ -101,11 +119,13 @@ async function assertLiveOwner(workspaceId: string, actorId: string): Promise<vo
   }
 }
 
-function safeMetadata(row?: ProviderRow) {
+function safeMetadata(workspaceId: string, row?: ProviderRow) {
+  const eligible = rolloutEnabled(workspaceId);
   return {
     provider: PROVIDER as "jev",
     configured: Boolean(row?.secretCiphertext && row.secretIv && row.secretAuthTag),
-    enabled: row?.enabled ?? false,
+    enabled: eligible && (row?.enabled ?? false),
+    rolloutEnabled: eligible,
     credentialRevision: row?.credentialRevision ?? 0,
     lastTestedAt: row?.lastTestedAt ?? null,
     lastTestOutcome: (row?.lastTestOutcome ?? null) as
@@ -149,6 +169,7 @@ async function reserveProviderTest(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
+    requireFeature(workspaceId);
     const [recentReservation] = await tx
       .select({ id: auditEventsTable.id })
       .from(auditEventsTable)
@@ -248,7 +269,7 @@ export class SemanticProviderService {
           eq(semanticProviderConfigsTable.provider, PROVIDER),
         ))
         .limit(1);
-      return safeMetadata(row);
+      return safeMetadata(workspaceId, row);
     });
   }
 
@@ -330,7 +351,7 @@ export class SemanticProviderService {
           enabled: false,
         },
       });
-      return safeMetadata(row);
+      return safeMetadata(workspaceId, row);
     });
   }
 
@@ -366,7 +387,7 @@ export class SemanticProviderService {
   async setReady(workspaceId: string, actorId: string, enabled: boolean) {
     return db.transaction(async (tx) => {
       await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
-      if (enabled) requireFeature();
+      if (enabled) requireFeature(workspaceId);
       const [existing] = await tx
         .select()
         .from(semanticProviderConfigsTable)
@@ -413,13 +434,13 @@ export class SemanticProviderService {
           enabled,
         },
       });
-      return safeMetadata(row);
+      return safeMetadata(workspaceId, row);
     });
   }
 
   async test(workspaceId: string, actorId: string) {
     await assertLiveOwner(workspaceId, actorId);
-    requireFeature();
+    requireFeature(workspaceId);
     const [row] = await db
       .select()
       .from(semanticProviderConfigsTable)
@@ -456,6 +477,7 @@ export class SemanticProviderService {
     // Recheck immediately before egress: ownership may have changed while the
     // key was decrypted/rotated or while the durable reservation was recorded.
     await assertLiveOwner(workspaceId, actorId);
+    requireFeature(workspaceId);
     const [current] = await db
       .select({ id: semanticProviderConfigsTable.id })
       .from(semanticProviderConfigsTable)
@@ -484,6 +506,7 @@ export class SemanticProviderService {
 
     return db.transaction(async (tx) => {
       await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
+      requireFeature(workspaceId);
       const [updated] = await tx
         .update(semanticProviderConfigsTable)
         .set({

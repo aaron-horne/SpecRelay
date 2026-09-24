@@ -331,7 +331,10 @@ export const SemanticProviderMetadataLastTestOutcome = {
 export interface SemanticProviderMetadata {
   provider: SemanticProviderMetadataProvider;
   configured: boolean;
+  /** Effective Ready status; false while either operator rollout gate is off. */
   enabled: boolean;
+  /** True only when both the operator's global gate and this workspace's test allowlist entry are active. */
+  rolloutEnabled: boolean;
   /** @minimum 0 */
   credentialRevision: number;
   /** @nullable */

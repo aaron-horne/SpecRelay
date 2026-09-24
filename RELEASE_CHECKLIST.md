@@ -46,12 +46,18 @@ deployment; completed items do not imply general production readiness.
       `(workspace_id, workspace_is_live)` composite foreign key only after
       verifying the existing parent `(id, is_live)` unique key. Select no
       truncation or destructive data operation.
+- [ ] Keep `SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS` empty until the schema and
+      ownership checks pass. When enabling the global gate, allowlist only the
+      approved live workspace UUID(s); malformed lists deny all workspaces.
+      A global flag alone does not enable Test or Ready in any workspace.
 - [ ] Before enabling any Phase 1B test, verify the actual staging catalog
       contains the validated/enabled tenth live-workspace FK and CHECK, plus
       the previously verified nine child guards and seven tenant FKs. Confirm
       workspace deletion remains guarded, OWNER access and CSRF work, and no
       automatic Jev calls occur. Only then opt in a deliberately selected
-      workspace for an explicit synthetic test; leave semantic analysis off.
+      workspace for an explicit fixed-state, typed-Noul test. Confirm the
+      response structure is valid; never threshold its probability. Leave
+      semantic analysis off.
 - [ ] Run tenant-isolation tests for workspace membership, resource IDs,
       roles, catalog, credentials, audit data, and MCP execution.
 - [ ] Verify production Clerk configuration and canonical `auth.userId`

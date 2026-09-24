@@ -1153,6 +1153,10 @@ components:
           type: boolean
         enabled:
           type: boolean
+          description: Effective Ready status; false while either operator rollout gate is off.
+        rolloutEnabled:
+          type: boolean
+          description: True only when both the operator's global gate and this workspace's test allowlist entry are active.
         credentialRevision:
           type: integer
           minimum: 0
@@ -1171,7 +1175,7 @@ components:
         updatedAt:
           type: ["string", "null"]
           format: date-time
-      required: [provider, configured, enabled, credentialRevision, lastTestedAt, lastTestOutcome, testedRevision, createdAt, updatedAt]
+      required: [provider, configured, enabled, rolloutEnabled, credentialRevision, lastTestedAt, lastTestOutcome, testedRevision, createdAt, updatedAt]
       additionalProperties: false
     SemanticProviderKeyInput:
       type: object

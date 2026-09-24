@@ -61,8 +61,13 @@ stored approval and policy still govern execution.
 The tracked TypeSafe skill is development guidance, not a runtime package.
 The optional Semantic assistance foundation stores a workspace owner's Jev key
 separately from upstream API credentials. It is off by default and supports only
-an explicit, synthetic, owner-initiated connection test when the global rollout
-gate permits it. There is no semantic analysis, enrichment, or trusted AI path:
+an explicit, fixed-data, owner-initiated connection test only when both
+`SEMANTIC_PROVIDERS_ENABLED=true` and the workspace UUID is explicitly listed
+in `SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS` (comma-separated; default-deny).
+Owners may save, replace, or delete keys before rollout but cannot Test or set
+Ready. A test requires a typed Noul answer; it does not grade its probability.
+Ready is effective only while both operator gates remain active.
+There is no semantic analysis, enrichment, or trusted AI path:
 import, governance, MCP, and execution do not call Jev. No Jev SDK is required
 at runtime. Future semantic analysis must remain advisory, and the core runs
 without a provider.

@@ -1,4 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
+import { and, eq, isNull } from "drizzle-orm";
+import { db, workspacesTable } from "@workspace/db";
 import {
   DeleteSemanticProviderKeyParams,
   DeleteSemanticProviderKeyResponse,
@@ -25,7 +27,28 @@ const router: IRouter = Router();
 const service = new SemanticProviderService();
 const route = "/workspaces/:workspaceId/semantic-providers/jev";
 
-router.use(route, requireWorkspaceMembership);
+const requireLiveWorkspace: RequestHandler = async (req, res, next): Promise<void> => {
+  if (typeof req.params.workspaceId !== "string") {
+    res.status(404).json({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
+    return;
+  }
+  const [workspace] = await db
+    .select({ id: workspacesTable.id })
+    .from(workspacesTable)
+    .where(and(
+      eq(workspacesTable.id, req.params.workspaceId),
+      eq(workspacesTable.isLive, true),
+      isNull(workspacesTable.deletedAt),
+    ))
+    .limit(1);
+  if (!workspace) {
+    res.status(404).json({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
+    return;
+  }
+  next();
+};
+
+router.use(route, requireWorkspaceMembership, requireLiveWorkspace);
 
 router.get(route, requireWorkspaceOwner, async (req, res): Promise<void> => {
   const params = GetSemanticProviderParams.safeParse(req.params);

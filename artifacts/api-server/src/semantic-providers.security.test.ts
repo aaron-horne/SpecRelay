@@ -10,15 +10,29 @@ import {
   db,
   semanticProviderConfigsTable,
   workspaceMembershipsTable,
+  workspacesTable,
 } from "@workspace/db";
 import app from "./app";
 import { SemanticProviderService } from "./services/semantic-providers";
-import type { SemanticProviderTestOutcome } from "./services/semantic-provider-adapters";
+import {
+  JevSemanticProviderAdapter,
+  type SemanticProviderTestOutcome,
+} from "./services/semantic-provider-adapters";
 
 process.env.SESSION_SECRET ??= "semantic-provider-security-test-key";
 
 const sameOrigin = "http://127.0.0.1";
 const secret = "semantic-provider-test-secret";
+const initialAllowlist = process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS;
+const typedAnswer = (noul: number) => JSON.stringify({
+  model: "jev-1.13.0",
+  answers: { marker_present: { type: "noul", noul } },
+  usage: { input_tokens: 20, output_tokens: 5 },
+});
+
+function allowWorkspace(...workspaceIds: string[]) {
+  process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS = workspaceIds.join(",");
+}
 
 function auth(userId: string) {
   return { "x-test-user-id": userId };
@@ -48,6 +62,8 @@ function save(workspaceId: string, userId: string, value = secret) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  if (initialAllowlist === undefined) delete process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS;
+  else process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS = initialAllowlist;
 });
 
 describe.sequential("semantic provider API security", () => {
@@ -159,6 +175,58 @@ describe.sequential("semantic provider API security", () => {
     }
   });
 
+  it("denies Test and Ready outside an explicit workspace allowlist even with the global gate on", async () => {
+    const previousFlag = process.env.SEMANTIC_PROVIDERS_ENABLED;
+    process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
+    delete process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS;
+    try {
+      const { id: allowedId, ownerId } = await createWorkspace();
+      const { id: otherId } = await createWorkspace(ownerId);
+      await save(allowedId, ownerId).expect(200);
+      await save(otherId, ownerId).expect(200);
+      const blocked = await request(app).get(endpoint(otherId)).set(auth(ownerId)).expect(200);
+      expect(blocked.body.rolloutEnabled).toBe(false);
+      const unavailable = await request(app).post(endpoint(otherId, "/test"))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(503);
+      expect(unavailable.body.code).toBe("SEMANTIC_PROVIDER_WORKSPACE_NOT_ALLOWED");
+      await request(app).patch(endpoint(otherId, "/ready"))
+        .set(auth(ownerId)).set("origin", sameOrigin).send({ enabled: true }).expect(503);
+
+      allowWorkspace(allowedId, "not-a-uuid");
+      await request(app).post(endpoint(allowedId, "/test"))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(503);
+      allowWorkspace(allowedId);
+      const eligible = await request(app).get(endpoint(allowedId)).set(auth(ownerId)).expect(200);
+      expect(eligible.body.rolloutEnabled).toBe(true);
+      expect((await request(app).get(endpoint(otherId)).set(auth(ownerId))).body.rolloutEnabled).toBe(false);
+      vi.stubGlobal("fetch", async () => new Response(typedAnswer(0), { status: 200 }));
+      const test = await request(app).post(endpoint(allowedId, "/test"))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(200);
+      expect(test.body.outcome).toBe("success");
+      const ready = await request(app).patch(endpoint(allowedId, "/ready"))
+        .set(auth(ownerId)).set("origin", sameOrigin).send({ enabled: true }).expect(200);
+      expect(ready.body.enabled).toBe(true);
+      delete process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS;
+      const paused = await request(app).get(endpoint(allowedId)).set(auth(ownerId)).expect(200);
+      expect(paused.body).toMatchObject({ rolloutEnabled: false, enabled: false });
+      await request(app).patch(endpoint(allowedId, "/ready"))
+        .set(auth(ownerId)).set("origin", sameOrigin).send({ enabled: true }).expect(503);
+      await request(app).post(endpoint(allowedId, "/test"))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(503);
+      allowWorkspace(allowedId);
+      await request(app).post(endpoint(otherId, "/test"))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(503);
+      await request(app).patch(endpoint(otherId, "/ready"))
+        .set(auth(ownerId)).set("origin", sameOrigin).send({ enabled: true }).expect(503);
+      await save(otherId, ownerId, `${secret}-new`).expect(200);
+      await request(app).delete(endpoint(otherId))
+        .set(auth(ownerId)).set("origin", sameOrigin).expect(200);
+    } finally {
+      if (previousFlag === undefined) delete process.env.SEMANTIC_PROVIDERS_ENABLED;
+      else process.env.SEMANTIC_PROVIDERS_ENABLED = previousFlag;
+    }
+  });
+
   it("enforces secret size limits and invalidates test/readiness after replacement", async () => {
     const previousFlag = process.env.SEMANTIC_PROVIDERS_ENABLED;
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
@@ -195,13 +263,14 @@ describe.sequential("semantic provider API security", () => {
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
     try {
       const { id: workspaceId, ownerId } = await createWorkspace();
+      allowWorkspace(workspaceId);
       await save(workspaceId, ownerId).expect(200);
       let capturedUrl = "";
       let capturedInit: RequestInit | undefined;
       vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
         capturedUrl = String(url);
         capturedInit = init;
-        return new Response("ok", { status: 200 });
+        return new Response(typedAnswer(0.5), { status: 200 });
       });
       await request(app)
         .post(endpoint(workspaceId, "/test"))
@@ -224,7 +293,22 @@ describe.sequential("semantic provider API security", () => {
         "content-type": "application/json",
         accept: "application/json",
       });
-      expect(capturedInit?.body).toBe(JSON.stringify({ input: "Noul" }));
+      expect(capturedInit?.body).toBe(JSON.stringify({
+        state: "The blue marker is present.",
+        model: "jev-latest",
+        questions: {
+          marker_present: {
+            type: "noul",
+            instructions: "Does the sentence explicitly state that the blue marker is present?",
+            criteria: {
+              true: "The sentence explicitly states that the blue marker is present.",
+              false: "The sentence does not explicitly state that the blue marker is present.",
+            },
+          },
+        },
+      }));
+      expect(JSON.stringify(capturedInit?.body)).not.toContain(workspaceId);
+      expect(JSON.stringify(capturedInit?.body)).not.toContain("attacker.example");
       expect(result.body).toMatchObject({ provider: "jev", outcome: "success", testedRevision: 1 });
       expect(JSON.stringify(result.body)).not.toMatch(/attacker|arbitrary|sensitive|secret/i);
       await request(app)
@@ -234,6 +318,7 @@ describe.sequential("semantic provider API security", () => {
         .expect(409);
 
       const oversizedWorkspace = await createWorkspace(ownerId);
+      allowWorkspace(workspaceId, oversizedWorkspace.id);
       await save(oversizedWorkspace.id, ownerId).expect(200);
       vi.stubGlobal("fetch", async () => new Response("x".repeat(2_049), { status: 200 }));
       const oversized = await request(app)
@@ -248,6 +333,40 @@ describe.sequential("semantic provider API security", () => {
     }
   });
 
+  it("requires a structurally valid typed Noul response instead of a generic 2xx", async () => {
+    const adapter = new JevSemanticProviderAdapter();
+    for (const body of [
+      "ok",
+      "",
+      "{}",
+      JSON.stringify({ model: "jev-1.13.0", answers: { marker_present: { type: "choice", noul: 0.9 } } }),
+      JSON.stringify({ model: "jev-1.13.0", answers: { marker_present: { type: "noul", noul: "0.9" } } }),
+      JSON.stringify({ model: "jev-1.13.0", answers: { marker_present: { type: "noul", noul: 1.1 } } }),
+      JSON.stringify({ answers: { marker_present: { type: "noul", noul: 0.9 } } }),
+    ]) {
+      vi.stubGlobal("fetch", async () => new Response(body, { status: 200 }));
+      expect(await adapter.test(secret)).toBe("integration_error");
+    }
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 204 }));
+    expect(await adapter.test(secret)).toBe("integration_error");
+    for (const probability of [0, 0.5, 1]) {
+      vi.stubGlobal("fetch", async () => new Response(typedAnswer(probability), { status: 200 }));
+      expect(await adapter.test(secret)).toBe("success");
+    }
+    for (const status of [401, 403]) {
+      vi.stubGlobal("fetch", async () => new Response(null, { status }));
+      expect(await adapter.test(secret)).toBe("rejected");
+    }
+    for (const status of [408, 429, 503]) {
+      vi.stubGlobal("fetch", async () => new Response(null, { status }));
+      expect(await adapter.test(secret)).toBe("inconclusive");
+    }
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 400 }));
+    expect(await adapter.test(secret)).toBe("integration_error");
+    vi.stubGlobal("fetch", async () => { throw new DOMException("timeout", "TimeoutError"); });
+    expect(await adapter.test(secret)).toBe("inconclusive");
+  });
+
   it("discards a test result when the key revision changes in flight", async () => {
     const previousFlag = process.env.SEMANTIC_PROVIDERS_ENABLED;
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
@@ -257,6 +376,7 @@ describe.sequential("semantic provider API security", () => {
     const waiting = new Promise<SemanticProviderTestOutcome>((resolve) => { complete = resolve; });
     try {
       const { id: workspaceId, ownerId } = await createWorkspace();
+      allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
         async test(): Promise<SemanticProviderTestOutcome> {
           begin();
@@ -291,6 +411,7 @@ describe.sequential("semantic provider API security", () => {
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
     try {
       const { id: workspaceId, ownerId } = await createWorkspace();
+      allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
         async test(): Promise<SemanticProviderTestOutcome> {
           return "success";
@@ -332,6 +453,7 @@ describe.sequential("semantic provider API security", () => {
     const waiting = new Promise<SemanticProviderTestOutcome>((resolve) => { complete = resolve; });
     try {
       const { id: workspaceId, ownerId } = await createWorkspace();
+      allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
         async test(): Promise<SemanticProviderTestOutcome> {
           begin();
@@ -372,6 +494,12 @@ describe.sequential("semantic provider API security", () => {
       .set("origin", sameOrigin)
       .send({ name })
       .expect(204);
+    const [tombstone] = await db.select({
+      isLive: workspacesTable.isLive,
+      deletedAt: workspacesTable.deletedAt,
+    }).from(workspacesTable).where(eq(workspacesTable.id, workspaceId));
+    expect(tombstone?.isLive).toBe(false);
+    expect(tombstone?.deletedAt).not.toBeNull();
     await request(app).get(endpoint(workspaceId)).set(auth(ownerId)).expect(404);
   });
 });

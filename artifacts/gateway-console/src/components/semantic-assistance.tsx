@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   useGetSemanticProvider,
@@ -35,6 +35,14 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
 
   const [secret, setSecret] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!provider?.lastTestedAt) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [provider?.lastTestedAt])
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />
@@ -46,7 +54,11 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
 
   const isTestSuccess = provider.lastTestOutcome === 'success'
   const isCurrentRevisionTested = provider.testedRevision !== null && provider.testedRevision === provider.credentialRevision
-  const canBeReady = provider.configured && isTestSuccess && isCurrentRevisionTested
+  const canBeReady = provider.rolloutEnabled && provider.configured && isTestSuccess && isCurrentRevisionTested
+  const lastTestedTime = provider.lastTestedAt ? new Date(provider.lastTestedAt).getTime() : NaN
+  const cooldownSeconds = Number.isFinite(lastTestedTime)
+    ? Math.max(0, Math.ceil((lastTestedTime + 30_000 - now) / 1000))
+    : 0
 
   const handleSave = () => {
     if (!secret.trim()) return
@@ -124,7 +136,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
   let statusLabel = "Not configured"
   let badgeVariant: "default" | "secondary" | "outline" | "destructive" = "outline"
 
-  if (provider.enabled) {
+  if (provider.enabled && provider.rolloutEnabled) {
     statusLabel = "Ready"
     badgeVariant = "default"
   } else if (provider.configured) {
@@ -144,6 +156,11 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
             <CardDescription className="mt-1 max-w-2xl text-balance">
               Configure a Jev key for future semantic assistance. No semantic analysis is active yet, even when the key is Ready.
             </CardDescription>
+            {!provider.rolloutEnabled && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Connection tests and Ready are available only when this workspace is included in the operator rollout.
+              </p>
+            )}
           </div>
           <Badge variant={badgeVariant} className="text-xs uppercase tracking-wider">{statusLabel}</Badge>
         </div>
@@ -224,9 +241,9 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button onClick={handleTest} disabled={testProvider.isPending} variant="outline" size="sm" data-testid="button-test-semantic">
+              <Button onClick={handleTest} disabled={testProvider.isPending || cooldownSeconds > 0 || !provider.rolloutEnabled} variant="outline" size="sm" data-testid="button-test-semantic">
                 <Play className="h-3 w-3 mr-2" />
-                {testProvider.isPending ? "Testing..." : "Test Connection"}
+                {testProvider.isPending ? "Testing..." : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s` : "Test Connection"}
               </Button>
 
               <Button

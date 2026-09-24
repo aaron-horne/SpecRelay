@@ -639,7 +639,8 @@ export const getSemanticProviderResponseTestedRevisionMin = 0;
 export const GetSemanticProviderResponse = zod.object({
   "provider": zod.enum(['jev']),
   "configured": zod.boolean(),
-  "enabled": zod.boolean(),
+  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
   "credentialRevision": zod.number().int().min(getSemanticProviderResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
@@ -674,7 +675,8 @@ export const saveSemanticProviderKeyResponseTestedRevisionMin = 0;
 export const SaveSemanticProviderKeyResponse = zod.object({
   "provider": zod.enum(['jev']),
   "configured": zod.boolean(),
-  "enabled": zod.boolean(),
+  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
   "credentialRevision": zod.number().int().min(saveSemanticProviderKeyResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
@@ -716,7 +718,8 @@ export const setSemanticProviderReadyResponseTestedRevisionMin = 0;
 export const SetSemanticProviderReadyResponse = zod.object({
   "provider": zod.enum(['jev']),
   "configured": zod.boolean(),
-  "enabled": zod.boolean(),
+  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
   "credentialRevision": zod.number().int().min(setSemanticProviderReadyResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
