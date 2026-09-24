@@ -284,6 +284,7 @@ export class SemanticProviderService {
   constructor(
     private readonly adapter: SemanticProviderAdapter = jevSemanticProviderAdapter,
     private readonly afterReservation?: () => Promise<void>,
+    private readonly beforeDispatch?: () => Promise<void>,
   ) {}
 
   async getMetadata(workspaceId: string, actorId: string) {
@@ -589,6 +590,10 @@ export class SemanticProviderService {
           "SEMANTIC_PROVIDER_REVISION_CONFLICT",
         );
       }
+      await this.beforeDispatch?.();
+      // Operator settings are not covered by database locks. Recheck after every
+      // awaited prerequisite, immediately before starting the outbound request.
+      requireFeature(workspaceId);
       try {
         return await this.adapter.dispatch(secret);
       } catch {

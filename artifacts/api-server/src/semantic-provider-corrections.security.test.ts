@@ -182,6 +182,46 @@ describe.sequential("Phase 1A provider corrections", () => {
     }
   });
 
+  it("rechecks operator rollout after the awaited dispatch prerequisites, before egress", async () => {
+    for (const change of ["global", "allowlist"] as const) {
+      const { id, ownerId } = await workspace();
+      process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
+      process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS = id;
+      let reached!: () => void;
+      let release!: () => void;
+      const atBoundary = new Promise<void>((resolve) => { reached = resolve; });
+      const paused = new Promise<void>((resolve) => { release = resolve; });
+      const adapter: SemanticProviderAdapter = { dispatch: vi.fn(async () => ({
+        outcome: Promise.resolve("success" as const),
+      })) };
+      const service = new SemanticProviderService(adapter, undefined, async () => {
+        reached();
+        await paused;
+      });
+      await service.saveKey(id, ownerId, secret);
+      const testing = service.test(id, ownerId);
+      await atBoundary;
+      if (change === "global") {
+        delete process.env.SEMANTIC_PROVIDERS_ENABLED;
+      } else {
+        process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS = randomUUID();
+      }
+      release();
+      await expect(testing).rejects.toMatchObject({
+        status: 503,
+        code: change === "global" ? "SEMANTIC_PROVIDERS_DISABLED" :
+          "SEMANTIC_PROVIDER_WORKSPACE_NOT_ALLOWED",
+      });
+      expect(adapter.dispatch).not.toHaveBeenCalled();
+      const metadata = await service.getMetadata(id, ownerId);
+      expect(metadata.testCooldownUntil?.getTime()).toBeGreaterThan(Date.now());
+      const results = await db.select().from(auditEventsTable).where(and(
+        eq(auditEventsTable.workspaceId, id), eq(auditEventsTable.eventType, "semantic_provider.tested"),
+      ));
+      expect(results).toHaveLength(0);
+    }
+  });
+
   it("serializes credential replacement with dispatch until the request is on the wire", async () => {
     const { id, ownerId } = await workspace();
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
