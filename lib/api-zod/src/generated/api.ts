@@ -638,9 +638,11 @@ export const getSemanticProviderResponseTestedRevisionMin = 0;
 
 export const GetSemanticProviderResponse = zod.object({
   "provider": zod.enum(['jev']),
-  "configured": zod.boolean(),
-  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "configured": zod.boolean().describe('A stored encryption envelope exists; this does not guarantee it is decryptable.'),
+  "credentialUsable": zod.boolean().describe('True only when the server can decrypt the stored credential with its configured key ring.'),
+  "enabled": zod.boolean().describe('Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs.'),
   "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
+  "testCooldownUntil": zod.coerce.date().nullable().describe('Audit-backed test cooldown expiry, including after credential replacement or recreation.'),
   "credentialRevision": zod.number().int().min(getSemanticProviderResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
@@ -674,9 +676,11 @@ export const saveSemanticProviderKeyResponseTestedRevisionMin = 0;
 
 export const SaveSemanticProviderKeyResponse = zod.object({
   "provider": zod.enum(['jev']),
-  "configured": zod.boolean(),
-  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "configured": zod.boolean().describe('A stored encryption envelope exists; this does not guarantee it is decryptable.'),
+  "credentialUsable": zod.boolean().describe('True only when the server can decrypt the stored credential with its configured key ring.'),
+  "enabled": zod.boolean().describe('Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs.'),
   "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
+  "testCooldownUntil": zod.coerce.date().nullable().describe('Audit-backed test cooldown expiry, including after credential replacement or recreation.'),
   "credentialRevision": zod.number().int().min(saveSemanticProviderKeyResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
@@ -699,7 +703,8 @@ export const DeleteSemanticProviderKeyResponse = zod.object({
 
 
 /**
- * @summary Enable or disable the tested Jev provider
+ * This preference never starts semantic analysis or automatic Jev egress in Phase 1A.
+ * @summary Store or clear a future-phase Jev readiness preference
  */
 export const SetSemanticProviderReadyParams = zod.object({
   "workspaceId": zod.coerce.string().uuid()
@@ -717,13 +722,45 @@ export const setSemanticProviderReadyResponseTestedRevisionMin = 0;
 
 export const SetSemanticProviderReadyResponse = zod.object({
   "provider": zod.enum(['jev']),
-  "configured": zod.boolean(),
-  "enabled": zod.boolean().describe('Effective Ready status; false while either operator rollout gate is off.'),
+  "configured": zod.boolean().describe('A stored encryption envelope exists; this does not guarantee it is decryptable.'),
+  "credentialUsable": zod.boolean().describe('True only when the server can decrypt the stored credential with its configured key ring.'),
+  "enabled": zod.boolean().describe('Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs.'),
   "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
+  "testCooldownUntil": zod.coerce.date().nullable().describe('Audit-backed test cooldown expiry, including after credential replacement or recreation.'),
   "credentialRevision": zod.number().int().min(setSemanticProviderReadyResponseCredentialRevisionMin),
   "lastTestedAt": zod.coerce.date().nullable(),
   "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
   "testedRevision": zod.number().int().min(setSemanticProviderReadyResponseTestedRevisionMin).nullable(),
+  "createdAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * OWNER-only and independent of rollout eligibility. Does not test the connection or change readiness.
+ * @summary Re-encrypt a stored Jev key with the current encryption key without contacting Jev
+ */
+export const RefreshSemanticProviderEncryptionParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const refreshSemanticProviderEncryptionResponseCredentialRevisionMin = 0;
+
+export const refreshSemanticProviderEncryptionResponseTestedRevisionMin = 0;
+
+
+
+export const RefreshSemanticProviderEncryptionResponse = zod.object({
+  "provider": zod.enum(['jev']),
+  "configured": zod.boolean().describe('A stored encryption envelope exists; this does not guarantee it is decryptable.'),
+  "credentialUsable": zod.boolean().describe('True only when the server can decrypt the stored credential with its configured key ring.'),
+  "enabled": zod.boolean().describe('Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs.'),
+  "rolloutEnabled": zod.boolean().describe('True only when both the operator\'s global gate and this workspace\'s test allowlist entry are active.'),
+  "testCooldownUntil": zod.coerce.date().nullable().describe('Audit-backed test cooldown expiry, including after credential replacement or recreation.'),
+  "credentialRevision": zod.number().int().min(refreshSemanticProviderEncryptionResponseCredentialRevisionMin),
+  "lastTestedAt": zod.coerce.date().nullable(),
+  "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
+  "testedRevision": zod.number().int().min(refreshSemanticProviderEncryptionResponseTestedRevisionMin).nullable(),
   "createdAt": zod.coerce.date().nullable(),
   "updatedAt": zod.coerce.date().nullable()
 })

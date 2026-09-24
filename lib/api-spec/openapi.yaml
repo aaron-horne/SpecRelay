@@ -531,7 +531,8 @@ paths:
     patch:
       operationId: setSemanticProviderReady
       tags: [semantic-providers]
-      summary: Enable or disable the tested Jev provider
+      summary: Store or clear a future-phase Jev readiness preference
+      description: This preference never starts semantic analysis or automatic Jev egress in Phase 1A.
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       requestBody:
@@ -565,6 +566,35 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Semantic provider feature is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /workspaces/{workspaceId}/semantic-providers/jev/refresh-encryption:
+    post:
+      operationId: refreshSemanticProviderEncryption
+      tags: [semantic-providers]
+      summary: Re-encrypt a stored Jev key with the current encryption key without contacting Jev
+      description: OWNER-only and independent of rollout eligibility. Does not test the connection or change readiness.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Safe provider configuration metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderMetadata"
+        "403":
+          description: Owner access or same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Stored key cannot be decrypted with the configured key ring
           content:
             application/json:
               schema:
@@ -1151,12 +1181,20 @@ components:
           enum: [jev]
         configured:
           type: boolean
+          description: A stored encryption envelope exists; this does not guarantee it is decryptable.
+        credentialUsable:
+          type: boolean
+          description: True only when the server can decrypt the stored credential with its configured key ring.
         enabled:
           type: boolean
-          description: Effective Ready status; false while either operator rollout gate is off.
+          description: Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs.
         rolloutEnabled:
           type: boolean
           description: True only when both the operator's global gate and this workspace's test allowlist entry are active.
+        testCooldownUntil:
+          type: ["string", "null"]
+          format: date-time
+          description: Audit-backed test cooldown expiry, including after credential replacement or recreation.
         credentialRevision:
           type: integer
           minimum: 0
@@ -1175,7 +1213,7 @@ components:
         updatedAt:
           type: ["string", "null"]
           format: date-time
-      required: [provider, configured, enabled, rolloutEnabled, credentialRevision, lastTestedAt, lastTestOutcome, testedRevision, createdAt, updatedAt]
+      required: [provider, configured, credentialUsable, enabled, rolloutEnabled, testCooldownUntil, credentialRevision, lastTestedAt, lastTestOutcome, testedRevision, createdAt, updatedAt]
       additionalProperties: false
     SemanticProviderKeyInput:
       type: object

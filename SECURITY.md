@@ -74,7 +74,15 @@ path, and the core does not depend on a provider.
 2. Configure it as current with a new ID and version; configure the old key as
    the explicit previous key with its exact ID and version.
 3. Allow normal credential use to lazily re-encrypt old records.
-4. Verify re-encryption, remove all previous-key settings, and deploy again.
+   For Jev keys, an authorized live-workspace OWNER can use the no-egress
+   Refresh encryption action even when Test/Ready are excluded by rollout.
+   This retains the credential revision and test history without claiming a
+   new successful Jev test or activating semantic analysis.
+4. Verify *every* stored credential envelope, including Jev keys in excluded
+   workspaces, uses the current key ID/version before removing any previous-key
+   settings. Retain the previous key until old records are refreshed or replaced;
+   an inaccessible old-key record is reported as unusable and not Ready.
+   Then remove previous-key settings and deploy again.
 
 Never place key material in source control, logs, errors, UI, API/MCP
 responses, or audit events.

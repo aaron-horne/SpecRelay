@@ -64,9 +64,16 @@ separately from upstream API credentials. It is off by default and supports only
 an explicit, fixed-data, owner-initiated connection test only when both
 `SEMANTIC_PROVIDERS_ENABLED=true` and the workspace UUID is explicitly listed
 in `SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS` (comma-separated; default-deny).
-Owners may save, replace, or delete keys before rollout but cannot Test or set
-Ready. A test requires a typed Noul answer; it does not grade its probability.
-Ready is effective only while both operator gates remain active.
+Owners may save, replace, delete, or re-encrypt keys before rollout but cannot
+Test or set future readiness. An OWNER can refresh a previous-key encryption
+envelope without contacting Jev or changing the tested revision, even when the
+workspace is excluded from rollout. Metadata distinguishes a stored envelope
+from a key the server can actually decrypt. A test requires a typed Noul answer;
+it does not grade its probability. The stored future-readiness preference
+becomes effective only while both operator gates are active and the key is
+decryptable. Removing and later restoring an allowlist entry can restore that
+preference without retesting the unchanged key; it never starts analysis or
+automatic Jev egress in Phase 1A.
 There is no semantic analysis, enrichment, or trusted AI path:
 import, governance, MCP, and execution do not call Jev. No Jev SDK is required
 at runtime. Future semantic analysis must remain advisory, and the core runs

@@ -6,6 +6,7 @@ import {
   useDeleteSemanticProviderKey,
   useSetSemanticProviderReady,
   useTestSemanticProvider,
+  useRefreshSemanticProviderEncryption,
   getGetSemanticProviderQueryKey
 } from "@workspace/api-client-react"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDistanceToNow } from "date-fns"
-import { BrainCircuit, CheckCircle2, AlertTriangle, Clock, Trash2, Play } from "lucide-react"
+import { BrainCircuit, CheckCircle2, AlertTriangle, Clock, Trash2, Play, RefreshCw } from "lucide-react"
+import { PHASE_1A_DESCRIPTION, testCooldownSeconds, testFailureMessage } from "./semantic-assistance-status"
 
 function isServiceUnavailable(error: unknown): boolean {
   return typeof error === "object" && error !== null && "status" in error && error.status === 503
@@ -32,17 +34,18 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
   const deleteKey = useDeleteSemanticProviderKey()
   const setReady = useSetSemanticProviderReady()
   const testProvider = useTestSemanticProvider()
+  const refreshEncryption = useRefreshSemanticProviderEncryption()
 
   const [secret, setSecret] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!provider?.lastTestedAt) return
+    if (!provider?.testCooldownUntil) return
     setNow(Date.now())
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [provider?.lastTestedAt])
+  }, [provider?.testCooldownUntil])
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />
@@ -54,11 +57,8 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
 
   const isTestSuccess = provider.lastTestOutcome === 'success'
   const isCurrentRevisionTested = provider.testedRevision !== null && provider.testedRevision === provider.credentialRevision
-  const canBeReady = provider.rolloutEnabled && provider.configured && isTestSuccess && isCurrentRevisionTested
-  const lastTestedTime = provider.lastTestedAt ? new Date(provider.lastTestedAt).getTime() : NaN
-  const cooldownSeconds = Number.isFinite(lastTestedTime)
-    ? Math.max(0, Math.ceil((lastTestedTime + 30_000 - now) / 1000))
-    : 0
+  const canBeReady = provider.rolloutEnabled && provider.credentialUsable && isTestSuccess && isCurrentRevisionTested
+  const cooldownSeconds = testCooldownSeconds(provider.testCooldownUntil, now)
 
   const handleSave = () => {
     if (!secret.trim()) return
@@ -108,9 +108,10 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
         queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
       },
       onError: (err: unknown) => {
+        queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
         toast({
           title: "Test failed",
-          description: isServiceUnavailable(err) ? "Connection tests are not available yet." : "Could not complete the test.",
+          description: testFailureMessage(err),
           variant: "destructive"
         })
       }
@@ -120,7 +121,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
   const handleToggleReady = (enabled: boolean) => {
     setReady.mutate({ workspaceId, data: { enabled } }, {
       onSuccess: () => {
-        toast({ title: enabled ? "Provider ready" : "Provider disabled", description: "State updated successfully." })
+        toast({ title: enabled ? "Future readiness saved" : "Future readiness cleared", description: "No semantic analysis or automatic Jev calls are active in Phase 1A." })
         queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
       },
       onError: () => {
@@ -133,11 +134,27 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
     })
   }
 
+  const handleRefreshEncryption = () => {
+    refreshEncryption.mutate({ workspaceId }, {
+      onSuccess: () => {
+        toast({ title: "Encryption refreshed", description: "The stored key was checked and, if needed, re-encrypted without contacting Jev." })
+        queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
+      },
+      onError: () => {
+        toast({ title: "Encryption refresh failed", description: "The key cannot be decrypted. Replace the credential to recover it.", variant: "destructive" })
+        queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
+      }
+    })
+  }
+
   let statusLabel = "Not configured"
   let badgeVariant: "default" | "secondary" | "outline" | "destructive" = "outline"
 
-  if (provider.enabled && provider.rolloutEnabled) {
-    statusLabel = "Ready"
+  if (provider.configured && !provider.credentialUsable) {
+    statusLabel = "Key unavailable"
+    badgeVariant = "destructive"
+  } else if (provider.enabled && provider.rolloutEnabled) {
+    statusLabel = "Ready for future phase"
     badgeVariant = "default"
   } else if (provider.configured) {
     statusLabel = "Configured"
@@ -154,7 +171,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
               Semantic Assistance
             </CardTitle>
             <CardDescription className="mt-1 max-w-2xl text-balance">
-              Configure a Jev key for future semantic assistance. No semantic analysis is active yet, even when the key is Ready.
+              {PHASE_1A_DESCRIPTION}
             </CardDescription>
             {!provider.rolloutEnabled && (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -204,16 +221,25 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
                 </DialogContent>
               </Dialog>
             )}
+              {provider.configured && (
+                <Button onClick={handleRefreshEncryption} disabled={refreshEncryption.isPending} variant="outline" size="sm" data-testid="button-refresh-semantic-encryption">
+                  <RefreshCw className="h-3 w-3 mr-2" />
+                  {refreshEncryption.isPending ? "Checking..." : "Refresh encryption"}
+                </Button>
+              )}
           </div>
         </div>
 
         {provider.configured && (
           <div className="rounded-md border p-4 bg-muted/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
+              {!provider.credentialUsable && (
+                <p className="text-sm text-destructive">This stored key cannot be decrypted. Replace it to recover; a past test does not make it usable.</p>
+              )}
               <p className="text-sm font-medium flex items-center gap-2">
                 Connection Status
                 {provider.lastTestedAt ? (
-                  provider.lastTestOutcome === 'success' ? (
+                  provider.credentialUsable && provider.lastTestOutcome === 'success' ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                   ) : (
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -227,7 +253,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
                   <>
                     Last tested {formatDistanceToNow(new Date(provider.lastTestedAt))} ago
                     <span className="mx-2 text-border">•</span>
-                    Outcome: <span className="font-mono">{provider.lastTestOutcome}</span>
+                    {provider.credentialUsable ? "Outcome" : "Historical outcome"}: <span className="font-mono">{provider.lastTestOutcome}</span>
                     {(!isCurrentRevisionTested) && (
                       <span className="block mt-1 text-amber-600 dark:text-amber-400">
                         Credential has changed since last test. Please re-test.
@@ -241,7 +267,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button onClick={handleTest} disabled={testProvider.isPending || cooldownSeconds > 0 || !provider.rolloutEnabled} variant="outline" size="sm" data-testid="button-test-semantic">
+              <Button onClick={handleTest} disabled={testProvider.isPending || cooldownSeconds > 0 || !provider.rolloutEnabled || !provider.credentialUsable} variant="outline" size="sm" data-testid="button-test-semantic">
                 <Play className="h-3 w-3 mr-2" />
                 {testProvider.isPending ? "Testing..." : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s` : "Test Connection"}
               </Button>
@@ -253,7 +279,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
                 size="sm"
                 data-testid="button-toggle-semantic"
               >
-                {setReady.isPending ? "Updating..." : provider.enabled ? "Disable" : "Set Ready"}
+                {setReady.isPending ? "Updating..." : provider.enabled ? "Clear future readiness" : "Save future readiness"}
               </Button>
             </div>
           </div>

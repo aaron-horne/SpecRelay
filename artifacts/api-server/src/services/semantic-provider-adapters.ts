@@ -5,7 +5,9 @@ export type SemanticProviderTestOutcome =
   | "inconclusive";
 
 export interface SemanticProviderAdapter {
-  test(secret: string): Promise<SemanticProviderTestOutcome>;
+  // Resolves only after the request has reached the response-header boundary (or failed).
+  // The outcome may still be pending while the response body is read.
+  dispatch(secret: string): Promise<{ outcome: Promise<SemanticProviderTestOutcome> }>;
 }
 
 const JEV_TEST_URL = "https://api.typesafe.ai/v1/systemone";
@@ -72,7 +74,7 @@ function hasTypedNoulAnswer(body: string): boolean {
 }
 
 export class JevSemanticProviderAdapter implements SemanticProviderAdapter {
-  async test(secret: string): Promise<SemanticProviderTestOutcome> {
+  async dispatch(secret: string): Promise<{ outcome: Promise<SemanticProviderTestOutcome> }> {
     let response: Response;
     try {
       response = await fetch(JEV_TEST_URL, {
@@ -89,11 +91,18 @@ export class JevSemanticProviderAdapter implements SemanticProviderAdapter {
         body: TEST_BODY,
       });
     } catch (error) {
-      return error instanceof Error && error.name === "TimeoutError"
-        ? "inconclusive"
-        : "integration_error";
+      return { outcome: Promise.resolve(error instanceof Error && error.name === "TimeoutError"
+        ? "inconclusive" : "integration_error") };
     }
 
+    return { outcome: this.classify(response).catch(() => "integration_error") };
+  }
+
+  async test(secret: string): Promise<SemanticProviderTestOutcome> {
+    return (await this.dispatch(secret)).outcome;
+  }
+
+  private async classify(response: Response): Promise<SemanticProviderTestOutcome> {
     if (response.status === 401 || response.status === 403) return "rejected";
     if (response.status === 408 || response.status === 429 || response.status >= 500) {
       return "inconclusive";

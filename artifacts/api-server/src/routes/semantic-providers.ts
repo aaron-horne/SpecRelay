@@ -9,6 +9,8 @@ import {
   SaveSemanticProviderKeyBody,
   SaveSemanticProviderKeyParams,
   SaveSemanticProviderKeyResponse,
+  RefreshSemanticProviderEncryptionParams,
+  RefreshSemanticProviderEncryptionResponse,
   SetSemanticProviderReadyBody,
   SetSemanticProviderReadyParams,
   SetSemanticProviderReadyResponse,
@@ -86,6 +88,28 @@ router.delete(route, requireWorkspaceOwner, requireSameOrigin, async (req, res):
   const result = await service.deleteKey(params.data.workspaceId, actorId(req));
   res.json(DeleteSemanticProviderKeyResponse.parse(result));
 });
+
+router.post(
+  `${route}/refresh-encryption`,
+  requireWorkspaceOwner,
+  requireSameOrigin,
+  async (req, res): Promise<void> => {
+    const params = RefreshSemanticProviderEncryptionParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: "Invalid workspace identifier", code: "INVALID_INPUT" });
+      return;
+    }
+    if (req.body !== undefined && req.body !== null &&
+        (typeof req.body !== "object" || Array.isArray(req.body) ||
+          Object.keys(req.body as Record<string, unknown>).length > 0)) {
+      res.status(400).json({ error: "Encryption refresh accepts no payload", code: "INVALID_INPUT" });
+      return;
+    }
+    res.json(RefreshSemanticProviderEncryptionResponse.parse(
+      await service.refreshEncryption(params.data.workspaceId, actorId(req)),
+    ));
+  },
+);
 
 router.patch(
   `${route}/ready`,

@@ -1812,7 +1812,8 @@ export const getSetSemanticProviderReadyUrl = (workspaceId: string,) => {
 }
 
 /**
- * @summary Enable or disable the tested Jev provider
+ * This preference never starts semantic analysis or automatic Jev egress in Phase 1A.
+ * @summary Store or clear a future-phase Jev readiness preference
  */
 export const setSemanticProviderReady = async (workspaceId: string,
     semanticProviderReadyInput: SemanticProviderReadyInput, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderMetadata> => {
@@ -1879,7 +1880,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SetSemanticProviderReadyMutationVariables = {workspaceId: string;data: BodyType<SemanticProviderReadyInput>}
 
     /**
- * @summary Enable or disable the tested Jev provider
+ * @summary Store or clear a future-phase Jev readiness preference
  */
 export const useSetSemanticProviderReady = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setSemanticProviderReady>>, TError,SetSemanticProviderReadyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1890,6 +1891,81 @@ export const useSetSemanticProviderReady = <TError = ErrorType<BadRequestRespons
         TContext
       > => {
       return useMutation(getSetSemanticProviderReadyMutationOptions(options));
+    }
+
+export const getRefreshSemanticProviderEncryptionUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev/refresh-encryption`
+}
+
+/**
+ * OWNER-only and independent of rollout eligibility. Does not test the connection or change readiness.
+ * @summary Re-encrypt a stored Jev key with the current encryption key without contacting Jev
+ */
+export const refreshSemanticProviderEncryption = async (workspaceId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderMetadata> => {
+
+  return customFetch<SemanticProviderMetadata>(getRefreshSemanticProviderEncryptionUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshSemanticProviderEncryptionMutationKey = () => ['refreshSemanticProviderEncryption'] as const;
+
+export const getRefreshSemanticProviderEncryptionMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>, TError,RefreshSemanticProviderEncryptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>, TError,RefreshSemanticProviderEncryptionMutationVariables, TContext> => {
+
+const mutationKey = getRefreshSemanticProviderEncryptionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>, RefreshSemanticProviderEncryptionMutationVariables> = (props) => {
+          const {workspaceId} = props ?? {};
+
+          return  refreshSemanticProviderEncryption(workspaceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshSemanticProviderEncryptionMutationResult = NonNullable<Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>>
+
+    export type RefreshSemanticProviderEncryptionMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type RefreshSemanticProviderEncryptionMutationVariables = {workspaceId: string}
+
+    /**
+ * @summary Re-encrypt a stored Jev key with the current encryption key without contacting Jev
+ */
+export const useRefreshSemanticProviderEncryption = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>, TError,RefreshSemanticProviderEncryptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshSemanticProviderEncryption>>,
+        TError,
+        RefreshSemanticProviderEncryptionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRefreshSemanticProviderEncryptionMutationOptions(options));
     }
 
 export const getTestSemanticProviderUrl = (workspaceId: string,) => {

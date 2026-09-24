@@ -10,11 +10,19 @@ import type { SemanticProviderMetadataProvider } from './semanticProviderMetadat
 
 export interface SemanticProviderMetadata {
   provider: SemanticProviderMetadataProvider;
+  /** A stored encryption envelope exists; this does not guarantee it is decryptable. */
   configured: boolean;
-  /** Effective Ready status; false while either operator rollout gate is off. */
+  /** True only when the server can decrypt the stored credential with its configured key ring. */
+  credentialUsable: boolean;
+  /** Effective future-phase readiness preference; false while rollout is off or the key is undecryptable. No Phase 1A semantic analysis occurs. */
   enabled: boolean;
   /** True only when both the operator's global gate and this workspace's test allowlist entry are active. */
   rolloutEnabled: boolean;
+  /**
+     * Audit-backed test cooldown expiry, including after credential replacement or recreation.
+     * @nullable
+     */
+  testCooldownUntil: Date | null;
   /** @minimum 0 */
   credentialRevision: number;
   /** @nullable */

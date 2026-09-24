@@ -378,9 +378,9 @@ describe.sequential("semantic provider API security", () => {
       const { id: workspaceId, ownerId } = await createWorkspace();
       allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
-        async test(): Promise<SemanticProviderTestOutcome> {
+        async dispatch() {
           begin();
-          return waiting;
+          return { outcome: waiting };
         },
       });
       await service.saveKey(workspaceId, ownerId, secret);
@@ -413,8 +413,8 @@ describe.sequential("semantic provider API security", () => {
       const { id: workspaceId, ownerId } = await createWorkspace();
       allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
-        async test(): Promise<SemanticProviderTestOutcome> {
-          return "success";
+        async dispatch() {
+          return { outcome: Promise.resolve("success" as SemanticProviderTestOutcome) };
         },
       });
       await service.saveKey(workspaceId, ownerId, secret);
@@ -455,9 +455,9 @@ describe.sequential("semantic provider API security", () => {
       const { id: workspaceId, ownerId } = await createWorkspace();
       allowWorkspace(workspaceId);
       const service = new SemanticProviderService({
-        async test(): Promise<SemanticProviderTestOutcome> {
+        async dispatch() {
           begin();
-          return waiting;
+          return { outcome: waiting };
         },
       });
       await service.saveKey(workspaceId, ownerId, secret);

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import {
   auditEventsTable,
   db,
@@ -119,13 +119,41 @@ async function assertLiveOwner(workspaceId: string, actorId: string): Promise<vo
   }
 }
 
-function safeMetadata(workspaceId: string, row?: ProviderRow) {
+function credentialUsable(workspaceId: string, row?: ProviderRow): boolean {
+  if (!row) return false;
+  try {
+    decryptSemanticProviderSecret(storedEnvelope(row), providerContext(workspaceId, row));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function testCooldownUntil(tx: DbTransaction, workspaceId: string): Promise<Date | null> {
+  const [reservation] = await tx
+    .select({ createdAt: auditEventsTable.createdAt })
+    .from(auditEventsTable)
+    .where(and(
+      eq(auditEventsTable.workspaceId, workspaceId),
+      eq(auditEventsTable.eventType, "semantic_provider.test.reserved"),
+      gte(auditEventsTable.createdAt, sql`now() - (${TEST_COOLDOWN_MS} * interval '1 millisecond')`),
+      sql`${auditEventsTable.metadata}->>'provider' = ${PROVIDER}`,
+    ))
+    .orderBy(desc(auditEventsTable.createdAt))
+    .limit(1);
+  return reservation ? new Date(reservation.createdAt.getTime() + TEST_COOLDOWN_MS) : null;
+}
+
+function safeMetadata(workspaceId: string, row: ProviderRow | undefined, cooldownUntil: Date | null) {
   const eligible = rolloutEnabled(workspaceId);
+  const usable = credentialUsable(workspaceId, row);
   return {
     provider: PROVIDER as "jev",
     configured: Boolean(row?.secretCiphertext && row.secretIv && row.secretAuthTag),
-    enabled: eligible && (row?.enabled ?? false),
+    credentialUsable: usable,
+    enabled: eligible && usable && (row?.enabled ?? false),
     rolloutEnabled: eligible,
+    testCooldownUntil: cooldownUntil,
     credentialRevision: row?.credentialRevision ?? 0,
     lastTestedAt: row?.lastTestedAt ?? null,
     lastTestOutcome: (row?.lastTestOutcome ?? null) as
@@ -255,6 +283,7 @@ async function reserveProviderTest(
 export class SemanticProviderService {
   constructor(
     private readonly adapter: SemanticProviderAdapter = jevSemanticProviderAdapter,
+    private readonly afterReservation?: () => Promise<void>,
   ) {}
 
   async getMetadata(workspaceId: string, actorId: string) {
@@ -269,7 +298,7 @@ export class SemanticProviderService {
           eq(semanticProviderConfigsTable.provider, PROVIDER),
         ))
         .limit(1);
-      return safeMetadata(workspaceId, row);
+      return safeMetadata(workspaceId, row, await testCooldownUntil(tx, workspaceId));
     });
   }
 
@@ -351,7 +380,7 @@ export class SemanticProviderService {
           enabled: false,
         },
       });
-      return safeMetadata(workspaceId, row);
+      return safeMetadata(workspaceId, row, await testCooldownUntil(tx, workspaceId));
     });
   }
 
@@ -384,6 +413,63 @@ export class SemanticProviderService {
     });
   }
 
+  async refreshEncryption(workspaceId: string, actorId: string) {
+    return db.transaction(async (tx) => {
+      await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
+      const [existing] = await tx
+        .select()
+        .from(semanticProviderConfigsTable)
+        .where(and(
+          eq(semanticProviderConfigsTable.workspaceId, workspaceId),
+          eq(semanticProviderConfigsTable.workspaceIsLive, true),
+          eq(semanticProviderConfigsTable.provider, PROVIDER),
+        ))
+        .limit(1);
+      if (!existing) throw notFound();
+
+      let secret: string;
+      let current: boolean;
+      try {
+        secret = decryptSemanticProviderSecret(storedEnvelope(existing), providerContext(workspaceId, existing));
+        current = isCurrentSemanticProviderKey(existing.keyId!, existing.keyVersion!);
+      } catch {
+        throw new ServiceError("Provider key cannot be decrypted; replace it to recover",
+          503, "SEMANTIC_PROVIDER_KEY_UNAVAILABLE");
+      }
+
+      let row = existing;
+      if (!current) {
+        const encrypted = encryptSemanticProviderSecret(secret, providerContext(workspaceId, existing));
+        const [updated] = await tx
+          .update(semanticProviderConfigsTable)
+          .set({
+            secretCiphertext: encrypted.ciphertext,
+            secretIv: encrypted.iv,
+            secretAuthTag: encrypted.authTag,
+            keyId: encrypted.keyId,
+            keyVersion: encrypted.keyVersion,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(semanticProviderConfigsTable.id, existing.id),
+            eq(semanticProviderConfigsTable.workspaceId, workspaceId),
+            eq(semanticProviderConfigsTable.credentialRevision, existing.credentialRevision),
+          ))
+          .returning();
+        if (!updated) throw new ServiceError("Provider key changed; retry", 409, "SEMANTIC_PROVIDER_REVISION_CONFLICT");
+        row = updated;
+        await tx.insert(auditEventsTable).values({
+          workspaceId,
+          eventType: "semantic_provider.key_reencrypted",
+          resourceType: "semantic_provider",
+          resourceId: row.id,
+          metadata: { actorId, provider: PROVIDER, credentialRevision: row.credentialRevision },
+        });
+      }
+      return safeMetadata(workspaceId, row, await testCooldownUntil(tx, workspaceId));
+    });
+  }
+
   async setReady(workspaceId: string, actorId: string, enabled: boolean) {
     return db.transaction(async (tx) => {
       await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
@@ -398,6 +484,10 @@ export class SemanticProviderService {
         ))
         .limit(1);
       if (!existing) throw notFound();
+      if (enabled && !credentialUsable(workspaceId, existing)) {
+        throw new ServiceError("Provider key cannot be decrypted; replace it to recover",
+          503, "SEMANTIC_PROVIDER_KEY_UNAVAILABLE");
+      }
       if (
         enabled &&
         (!existing.secretCiphertext ||
@@ -434,7 +524,7 @@ export class SemanticProviderService {
           enabled,
         },
       });
-      return safeMetadata(workspaceId, row);
+      return safeMetadata(workspaceId, row, await testCooldownUntil(tx, workspaceId));
     });
   }
 
@@ -473,36 +563,39 @@ export class SemanticProviderService {
 
     const startedAt = new Date();
     await reserveProviderTest(workspaceId, actorId, row, startedAt, rotatedEnvelope);
+    await this.afterReservation?.();
 
-    // Recheck immediately before egress: ownership may have changed while the
-    // key was decrypted/rotated or while the durable reservation was recorded.
-    await assertLiveOwner(workspaceId, actorId);
-    requireFeature(workspaceId);
-    const [current] = await db
-      .select({ id: semanticProviderConfigsTable.id })
-      .from(semanticProviderConfigsTable)
-      .where(and(
-        eq(semanticProviderConfigsTable.id, row.id),
-        eq(semanticProviderConfigsTable.workspaceId, workspaceId),
-        eq(semanticProviderConfigsTable.workspaceIsLive, true),
-        eq(semanticProviderConfigsTable.credentialRevision, row.credentialRevision),
-        eq(semanticProviderConfigsTable.lastTestedAt, startedAt),
-      ))
-      .limit(1);
-    if (!current) {
-      throw new ServiceError(
-        "Provider configuration changed before testing",
-        409,
-        "SEMANTIC_PROVIDER_REVISION_CONFLICT",
-      );
-    }
-
-    let outcome: SemanticProviderTestOutcome;
-    try {
-      outcome = await this.adapter.test(secret);
-    } catch {
-      outcome = "integration_error";
-    }
+    // The reservation is already committed. Hold the workspace and membership
+    // locks until dispatch is observable (response headers or network failure);
+    // a revocation that commits first cannot race between a check and egress.
+    const attempt = await db.transaction(async (tx) => {
+      await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);
+      requireFeature(workspaceId);
+      const [current] = await tx
+        .select({ id: semanticProviderConfigsTable.id })
+        .from(semanticProviderConfigsTable)
+        .where(and(
+          eq(semanticProviderConfigsTable.id, row.id),
+          eq(semanticProviderConfigsTable.workspaceId, workspaceId),
+          eq(semanticProviderConfigsTable.workspaceIsLive, true),
+          eq(semanticProviderConfigsTable.credentialRevision, row.credentialRevision),
+          eq(semanticProviderConfigsTable.lastTestedAt, startedAt),
+        ))
+        .limit(1);
+      if (!current) {
+        throw new ServiceError(
+          "Provider configuration changed before testing",
+          409,
+          "SEMANTIC_PROVIDER_REVISION_CONFLICT",
+        );
+      }
+      try {
+        return await this.adapter.dispatch(secret);
+      } catch {
+        return { outcome: Promise.resolve("integration_error" as const) };
+      }
+    });
+    const outcome: SemanticProviderTestOutcome = await attempt.outcome.catch(() => "integration_error");
 
     return db.transaction(async (tx) => {
       await lockWorkspaceAndRequireOwner(tx, workspaceId, actorId);

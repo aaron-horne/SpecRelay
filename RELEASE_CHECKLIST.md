@@ -50,6 +50,12 @@ deployment; completed items do not imply general production readiness.
       ownership checks pass. When enabling the global gate, allowlist only the
       approved live workspace UUID(s); malformed lists deny all workspaces.
       A global flag alone does not enable Test or Ready in any workspace.
+- [ ] Before retiring a previous credential encryption key, verify *all*
+      semantic-provider envelopes, including excluded workspaces, use the
+      current key. Owners can refresh encryption without Jev egress or a new
+      connection-test success. Retain the previous key until none remain.
+      Removing and restoring allowlist eligibility preserves a stored
+      future-readiness preference but cannot activate Phase 1A analysis.
 - [ ] Before enabling any Phase 1B test, verify the actual staging catalog
       contains the validated/enabled tenth live-workspace FK and CHECK, plus
       the previously verified nine child guards and seven tenant FKs. Confirm
