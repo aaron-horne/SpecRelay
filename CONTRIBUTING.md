@@ -35,9 +35,11 @@ responses, and add regression coverage for security fixes.
 The current scope is approved, authenticated HTTPS `GET` tools without request
 bodies, with declared API-key or HTTP Bearer credentials. Do not expand this
 into write methods, OAuth, arbitrary URLs, generic proxying, caller-supplied
-auth, or a semantic/AI runtime without an explicit design and threat-model
-review. The tracked TypeSafe skill is development guidance only and is not part
-of the runtime or production dependency set. Jev is not a runtime dependency.
+auth, or semantic analysis without an explicit design and threat-model review.
+The optional Jev BYOK foundation only stores an owner-managed key and permits
+an explicit synthetic connection test; it does not analyze specifications or
+participate in execution. The tracked TypeSafe skill is development guidance,
+not a runtime package, and there is no Jev SDK runtime dependency.
 
 ## Code generation and migrations
 

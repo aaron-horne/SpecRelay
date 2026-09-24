@@ -5,6 +5,7 @@ import {
   auditEventsTable,
   connectorActorsTable,
   executionLeasesTable,
+  semanticProviderConfigsTable,
   db,
   workspacesTable,
   workspaceMembershipsTable,
@@ -207,6 +208,9 @@ export class WorkspaceService {
       await tx
         .delete(executionLeasesTable)
         .where(eq(executionLeasesTable.workspaceId, workspaceId));
+      await tx
+        .delete(semanticProviderConfigsTable)
+        .where(eq(semanticProviderConfigsTable.workspaceId, workspaceId));
       // Remove guarded children before flipping the workspace live marker.
       // API-source cascades remove specifications, operations, policies, and
       // credentials; actor cascades remove connector tokens.

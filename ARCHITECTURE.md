@@ -68,12 +68,14 @@ remains mandatory.
 
 ## Development guidance and optional providers
 
-The tracked TypeSafe skill is development guidance only. It does not run in the
-application, participate in requests, affect policy decisions, or form part of
-the production dependency or trust boundary. Jev is not a runtime dependency.
-Any future semantic-provider interface must be optional, BYOK, disabled by
-default, and advisory. Core import, governance, MCP, and execution behavior must
-continue to work without it.
+The tracked TypeSafe skill is development guidance only, not a runtime package.
+The Phase 1A semantic-provider foundation can hold an OWNER-managed Jev key in
+a distinct workspace-scoped encrypted record. A separate provider adapter
+performs only an explicit synthetic connection test when globally permitted;
+the stored readiness flag does not activate analysis. No Jev SDK is required.
+There are no provider calls in import, governance, MCP, or execution. Future
+semantic analysis requires a separate advisory design and review; core
+behavior must continue to work without a provider.
 
 ## Policy
 

@@ -10,3 +10,4 @@ export * from "./connector-tokens";
 export * from "./connector-rate-limits";
 export * from "./connector-security-events";
 export * from "./execution-leases";
+export * from "./semantic-provider-configs";

@@ -13,6 +13,7 @@ const liveChildren = [
   "workspace_memberships", "api_sources", "api_spec_versions",
   "api_operations", "operation_policies", "credential_metadata",
   "connector_actors", "connector_tokens", "execution_leases",
+  "semantic_provider_configs",
 ];
 
 describe("production workspace deletion catalog gate", () => {
@@ -35,7 +36,7 @@ describe("production workspace deletion catalog gate", () => {
       parentColumns: [...entry.parentColumns],
       ...(entry.name === "api_spec_versions_workspace_api_fk" ? { validated: true } : {}),
     }));
-    // The managed Stage 1 development database intentionally lacks these nine
+    // The managed Stage 1 development database intentionally lacks these
     // FKs. Model the final Stage 2 catalog in memory without altering the
     // development schema; fresh migration-managed databases already have them.
     const template = constraints.find((entry) => entry.name === "api_operations_workspace_api_fk")!;
@@ -51,7 +52,26 @@ describe("production workspace deletion catalog gate", () => {
         validated: true,
       });
     }
+    const liveCheck = constraints.find((entry) => entry.name === "api_operations_live_check")!;
+    for (const child of liveChildren) {
+      if (constraints.some((entry) => entry.name === `${child}_live_check`)) continue;
+      constraints.push({
+        ...liveCheck,
+        name: `${child}_live_check`,
+        child,
+        checkExpression: "(workspace_is_live = true)",
+      });
+    }
     const columns = actualColumns.map((entry) => ({ ...entry }));
+    for (const name of ["workspace_id", "workspace_is_live"]) {
+      if (columns.some((entry) =>
+        entry.table === "semantic_provider_configs" && entry.column === name
+      )) continue;
+      const source = columns.find((entry) =>
+        entry.table === "workspace_memberships" && entry.column === name
+      )!;
+      columns.push({ ...source, table: "semantic_provider_configs" });
+    }
     return { constraints, columns };
   }
 
@@ -64,12 +84,12 @@ describe("production workspace deletion catalog gate", () => {
 
   it("accepts the intended declarative schema, including all seven validated tenant FKs", () => {
     const { constraints, columns } = fixture();
-    expect(constraints).toHaveLength(27);
-    expect(columns).toHaveLength(21);
+    expect(constraints).toHaveLength(29);
+    expect(columns).toHaveLength(23);
     expect(hasWorkspaceDeletionGuards(constraints, columns)).toBe(true);
     // An incomplete Stage 1 catalog or the known historical NOT VALID row
     // must fail closed, even though the complete in-memory fixture passes.
-    if (actualConstraints.length !== 27 || actualConstraints.some((row) => !row.validated)) {
+    if (actualConstraints.length !== 29 || actualConstraints.some((row) => !row.validated)) {
       expect(hasWorkspaceDeletionGuards(actualConstraints, actualColumns)).toBe(false);
     }
   });

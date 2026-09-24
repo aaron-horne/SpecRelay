@@ -12,6 +12,9 @@ import app from "./app";
 import {
   decryptCredentialSecret,
   encryptCredentialSecret,
+  decryptSemanticProviderSecret,
+  encryptSemanticProviderSecret,
+  isCurrentSemanticProviderKey,
   validateCredentialEncryptionConfig,
 } from "./services/credential-crypto";
 import { CredentialService } from "./services/credentials";
@@ -75,6 +78,21 @@ describe.sequential("credential metadata security", () => {
       .toThrow();
     expect(() => decryptCredentialSecret({ ...encrypted, keyVersion: 99 }, context))
       .toThrow(/Unknown credential encryption version/);
+  });
+
+  it("binds semantic-provider encryption to its workspace, provider, and record", () => {
+    const context = {
+      workspaceId: "workspace",
+      provider: "provider-a",
+      credentialId: "credential-record",
+    };
+    const encrypted = encryptSemanticProviderSecret("semantic-secret", context);
+    expect(decryptSemanticProviderSecret(encrypted, context)).toBe("semantic-secret");
+    expect(isCurrentSemanticProviderKey(encrypted.keyId, encrypted.keyVersion)).toBe(true);
+    expect(() => decryptSemanticProviderSecret(encrypted, { ...context, provider: "provider-b" }))
+      .toThrow();
+    expect(() => decryptSemanticProviderSecret(encrypted, { ...context, credentialId: "other-record" }))
+      .toThrow();
   });
 
   it("decrypts credentials encrypted with the previous key after rotation", () => {

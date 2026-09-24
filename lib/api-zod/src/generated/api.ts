@@ -624,6 +624,128 @@ export const RevokeCredentialResponse = zod.object({
 
 
 /**
+ * @summary Get Jev provider configuration metadata
+ */
+export const GetSemanticProviderParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const getSemanticProviderResponseCredentialRevisionMin = 0;
+
+export const getSemanticProviderResponseTestedRevisionMin = 0;
+
+
+
+export const GetSemanticProviderResponse = zod.object({
+  "provider": zod.enum(['jev']),
+  "configured": zod.boolean(),
+  "enabled": zod.boolean(),
+  "credentialRevision": zod.number().int().min(getSemanticProviderResponseCredentialRevisionMin),
+  "lastTestedAt": zod.coerce.date().nullable(),
+  "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
+  "testedRevision": zod.number().int().min(getSemanticProviderResponseTestedRevisionMin).nullable(),
+  "createdAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * Secret input is encrypted at rest, never returned, and invalidates readiness.
+ * @summary Create or replace the Jev API key
+ */
+export const SaveSemanticProviderKeyParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const saveSemanticProviderKeyBodySecretMax = 8192;
+
+
+
+export const SaveSemanticProviderKeyBody = zod.object({
+  "secret": zod.string().min(1).max(saveSemanticProviderKeyBodySecretMax)
+})
+
+export const saveSemanticProviderKeyResponseCredentialRevisionMin = 0;
+
+export const saveSemanticProviderKeyResponseTestedRevisionMin = 0;
+
+
+
+export const SaveSemanticProviderKeyResponse = zod.object({
+  "provider": zod.enum(['jev']),
+  "configured": zod.boolean(),
+  "enabled": zod.boolean(),
+  "credentialRevision": zod.number().int().min(saveSemanticProviderKeyResponseCredentialRevisionMin),
+  "lastTestedAt": zod.coerce.date().nullable(),
+  "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
+  "testedRevision": zod.number().int().min(saveSemanticProviderKeyResponseTestedRevisionMin).nullable(),
+  "createdAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Delete the Jev API key
+ */
+export const DeleteSemanticProviderKeyParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const DeleteSemanticProviderKeyResponse = zod.object({
+  "deleted": zod.boolean()
+})
+
+
+/**
+ * @summary Enable or disable the tested Jev provider
+ */
+export const SetSemanticProviderReadyParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+export const SetSemanticProviderReadyBody = zod.object({
+  "enabled": zod.boolean()
+})
+
+export const setSemanticProviderReadyResponseCredentialRevisionMin = 0;
+
+export const setSemanticProviderReadyResponseTestedRevisionMin = 0;
+
+
+
+export const SetSemanticProviderReadyResponse = zod.object({
+  "provider": zod.enum(['jev']),
+  "configured": zod.boolean(),
+  "enabled": zod.boolean(),
+  "credentialRevision": zod.number().int().min(setSemanticProviderReadyResponseCredentialRevisionMin),
+  "lastTestedAt": zod.coerce.date().nullable(),
+  "lastTestOutcome": zod.union([zod.literal('success'),zod.literal('rejected'),zod.literal('integration_error'),zod.literal('inconclusive'),zod.literal(null)]).nullable(),
+  "testedRevision": zod.number().int().min(setSemanticProviderReadyResponseTestedRevisionMin).nullable(),
+  "createdAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * No caller-controlled host, model, or payload is accepted.
+ * @summary Test the Jev API key using a fixed synthetic request
+ */
+export const TestSemanticProviderParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid()
+})
+
+
+
+
+export const TestSemanticProviderResponse = zod.object({
+  "provider": zod.enum(['jev']),
+  "outcome": zod.enum(['success', 'rejected', 'integration_error', 'inconclusive']),
+  "testedRevision": zod.number().int().min(1),
+  "testedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List normalized API operations
  */
 export const ListOperationsParams = zod.object({

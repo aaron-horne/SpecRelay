@@ -12,6 +12,7 @@ import {
   credentialMetadataTable,
   db,
   executionLeasesTable,
+  semanticProviderConfigsTable,
   operationPoliciesTable,
   workspaceMembershipsTable,
   workspacesTable,
@@ -92,6 +93,16 @@ describe.sequential("workspace deletion security", () => {
       .send({ name }).expect(201)).body.id as string;
     const apiId = (await request(app).post(`/api/workspaces/${workspaceId}/apis`)
       .set("x-test-user-id", owner).send({ name: "To remove" }).expect(201)).body.id as string;
+    await db.insert(semanticProviderConfigsTable).values({
+      workspaceId,
+      provider: `provider-${randomUUID()}`,
+      enabled: true,
+      secretCiphertext: "encrypted",
+      secretIv: "iv",
+      secretAuthTag: "tag",
+      keyId: "key",
+      keyVersion: 1,
+    });
     // Controlled integration fixture: production mutation requires separate approval.
     const issued = await request(app).post(`/api/workspaces/${workspaceId}/connectors`)
       .set("x-test-user-id", owner)
@@ -129,7 +140,7 @@ describe.sequential("workspace deletion security", () => {
     for (const table of [
       apiSpecVersionsTable, apiOperationsTable, operationPoliciesTable,
       credentialMetadataTable, connectorActorsTable, connectorTokensTable,
-      executionLeasesTable,
+      executionLeasesTable, semanticProviderConfigsTable,
     ]) {
       await expect(db.select().from(table).where(eq(table.workspaceId, workspaceId))).resolves.toHaveLength(0);
     }

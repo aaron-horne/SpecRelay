@@ -62,9 +62,11 @@ production.
 ## Non-goals
 
 Write methods, request bodies, OAuth/OAuth2/OIDC, unsupported credential
-schemes, caller-supplied authentication, arbitrary URLs, generic proxying, and
-new product features remain outside the current execution boundary. A future
-semantic provider is optional BYOK/advisory; the core does not depend on one.
+schemes, caller-supplied authentication, arbitrary URLs, and generic proxying
+remain outside the current execution boundary. Optional semantic-provider BYOK
+stores a separate owner-managed workspace key; only an explicit synthetic
+connection test can contact Jev. There is no semantic analysis or trusted AI
+path, and the core does not depend on a provider.
 
 ## Credential key rotation
 

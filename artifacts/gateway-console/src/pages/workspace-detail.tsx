@@ -42,6 +42,7 @@ import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
 import { ConnectorTokens } from "@/components/connector-tokens"
 import { DeleteWorkspaceDialog } from "@/components/delete-workspace-dialog"
+import { SemanticAssistance } from "@/components/semantic-assistance"
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
@@ -208,6 +209,7 @@ export default function WorkspaceDetailPage() {
       </div>
 
       {overview.canManage && <ConnectorTokens workspaceId={workspaceId} />}
+      {overview.canManage && <SemanticAssistance workspaceId={workspaceId} />}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="col-span-1 border-t-4 border-t-primary">
           <CardHeader>

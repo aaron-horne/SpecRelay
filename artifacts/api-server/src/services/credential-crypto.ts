@@ -188,3 +188,89 @@ export function decryptCredentialSecret(
     decipher.final(),
   ]).toString("utf8");
 }
+
+const SEMANTIC_PROVIDER_KEY_CONTEXT = Buffer.from(
+  "specrelay semantic provider credential encryption v1",
+  "utf8",
+);
+const SEMANTIC_PROVIDER_AAD_PURPOSE = "semantic-provider-secret-v1";
+
+export interface SemanticProviderEncryptionContext {
+  readonly workspaceId: string;
+  readonly provider: string;
+  readonly credentialId: string;
+}
+
+export interface EncryptedSemanticProviderSecret {
+  readonly ciphertext: string;
+  readonly iv: string;
+  readonly authTag: string;
+  readonly keyId: string;
+  readonly keyVersion: number;
+}
+
+function deriveSemanticProviderKey(entry: KeyEntry): Buffer {
+  return Buffer.from(hkdfSync(
+    "sha256",
+    Buffer.from(entry.source, "utf8"),
+    KEY_SALT,
+    SEMANTIC_PROVIDER_KEY_CONTEXT,
+    32,
+  ));
+}
+
+function semanticProviderAad(context: SemanticProviderEncryptionContext): Buffer {
+  return Buffer.from([
+    SEMANTIC_PROVIDER_AAD_PURPOSE,
+    context.workspaceId,
+    context.provider,
+    context.credentialId,
+  ].join("\0"), "utf8");
+}
+
+export function encryptSemanticProviderSecret(
+  secret: string,
+  context: SemanticProviderEncryptionContext,
+): EncryptedSemanticProviderSecret {
+  const { current } = keyRing();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", deriveSemanticProviderKey(current), iv);
+  cipher.setAAD(semanticProviderAad(context));
+  const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  return {
+    ciphertext: ciphertext.toString("base64"),
+    iv: iv.toString("base64"),
+    authTag: cipher.getAuthTag().toString("base64"),
+    keyId: current.id,
+    keyVersion: current.version,
+  };
+}
+
+export function decryptSemanticProviderSecret(
+  input: EncryptedSemanticProviderSecret,
+  context: SemanticProviderEncryptionContext,
+): string {
+  const { current, previous } = keyRing();
+  const entry = [current, ...previous].find(
+    (candidate) => candidate.id === input.keyId && candidate.version === input.keyVersion,
+  );
+  if (!entry || !input.ciphertext || !input.iv || !input.authTag) {
+    throw new Error("Unknown semantic provider encryption version or key");
+  }
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    deriveSemanticProviderKey(entry),
+    Buffer.from(input.iv, "base64"),
+  );
+  decipher.setAAD(semanticProviderAad(context));
+  decipher.setAuthTag(Buffer.from(input.authTag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(input.ciphertext, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+export function isCurrentSemanticProviderKey(keyId: string, version: number): boolean {
+  const { current } = keyRing();
+  return current.id === keyId && current.version === version;
+}

@@ -21,6 +21,7 @@ const liveChildren = [
   "connector_actors",
   "connector_tokens",
   "execution_leases",
+  "semantic_provider_configs",
 ] as const;
 
 const olderTenantKeys: ForeignKeySpec[] = [

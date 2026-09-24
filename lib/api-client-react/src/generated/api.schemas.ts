@@ -308,6 +308,88 @@ export interface CredentialMetadata {
   updatedAt: string;
 }
 
+export type SemanticProviderMetadataProvider = typeof SemanticProviderMetadataProvider[keyof typeof SemanticProviderMetadataProvider];
+
+
+export const SemanticProviderMetadataProvider = {
+  jev: 'jev',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SemanticProviderMetadataLastTestOutcome = typeof SemanticProviderMetadataLastTestOutcome[keyof typeof SemanticProviderMetadataLastTestOutcome] | null;
+
+
+export const SemanticProviderMetadataLastTestOutcome = {
+  success: 'success',
+  rejected: 'rejected',
+  integration_error: 'integration_error',
+  inconclusive: 'inconclusive',
+} as const;
+
+export interface SemanticProviderMetadata {
+  provider: SemanticProviderMetadataProvider;
+  configured: boolean;
+  enabled: boolean;
+  /** @minimum 0 */
+  credentialRevision: number;
+  /** @nullable */
+  lastTestedAt: string | null;
+  /** @nullable */
+  lastTestOutcome: SemanticProviderMetadataLastTestOutcome;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  testedRevision: number | null;
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export interface SemanticProviderKeyInput {
+  /**
+     * @minLength 1
+     * @maxLength 8192
+     */
+  secret: string;
+}
+
+export interface SemanticProviderReadyInput {
+  enabled: boolean;
+}
+
+export type SemanticProviderTestResultProvider = typeof SemanticProviderTestResultProvider[keyof typeof SemanticProviderTestResultProvider];
+
+
+export const SemanticProviderTestResultProvider = {
+  jev: 'jev',
+} as const;
+
+export type SemanticProviderTestResultOutcome = typeof SemanticProviderTestResultOutcome[keyof typeof SemanticProviderTestResultOutcome];
+
+
+export const SemanticProviderTestResultOutcome = {
+  success: 'success',
+  rejected: 'rejected',
+  integration_error: 'integration_error',
+  inconclusive: 'inconclusive',
+} as const;
+
+export interface SemanticProviderTestResult {
+  provider: SemanticProviderTestResultProvider;
+  outcome: SemanticProviderTestResultOutcome;
+  /** @minimum 1 */
+  testedRevision: number;
+  testedAt: string;
+}
+
+export interface SemanticProviderDeleteResult {
+  deleted: boolean;
+}
+
 export interface CredentialInput {
   /**
      * @minLength 1

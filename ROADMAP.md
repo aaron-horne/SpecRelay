@@ -35,14 +35,16 @@ for the implemented security and lifecycle design.
 
 ## Optional semantic assistance
 
-- An optional semantic-provider interface may be explored for advisory
-  classification or review assistance.
-- Any provider must be BYOK, disabled by default, non-authoritative, and outside
-  the trusted execution path.
+- **Foundation only:** A workspace OWNER can configure and test a Jev key
+  through an optional, default-off BYOK provider interface. A successful
+  connection test means the key is ready; it does not enable analysis.
+- Future per-operation semantic suggestions and human review remain unbuilt.
+  Any provider analysis must be non-authoritative and outside the trusted
+  execution path.
 - Stored approval, tenant authorization, deterministic policy, and outbound
   controls must remain authoritative.
 - Core SpecRelay must remain fully functional without a provider. TypeSafe is
-  development guidance only, and Jev is not a runtime dependency.
+  development guidance only; there is no Jev SDK runtime dependency.
 
 ## Current boundary
 

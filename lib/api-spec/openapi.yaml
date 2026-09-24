@@ -18,6 +18,8 @@ tags:
     description: Normalized OpenAPI operation catalog
   - name: credentials
     description: Owner-managed API key and Bearer credentials
+  - name: semantic-providers
+    description: Owner-managed semantic provider configuration
   - name: mcp
     description: Approved MCP tool discovery and invocation
   - name: execution
@@ -452,6 +454,156 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/semantic-providers/jev:
+    get:
+      operationId: getSemanticProvider
+      tags: [semantic-providers]
+      summary: Get Jev provider configuration metadata
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Safe provider configuration metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderMetadata"
+        "403":
+          description: Workspace owner required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: saveSemanticProviderKey
+      tags: [semantic-providers]
+      summary: Create or replace the Jev API key
+      description: Secret input is encrypted at rest, never returned, and invalidates readiness.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SemanticProviderKeyInput"
+      responses:
+        "200":
+          description: Safe provider configuration metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderMetadata"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Owner access or same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteSemanticProviderKey
+      tags: [semantic-providers]
+      summary: Delete the Jev API key
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Key deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderDeleteResult"
+        "403":
+          description: Owner access or same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /workspaces/{workspaceId}/semantic-providers/jev/ready:
+    patch:
+      operationId: setSemanticProviderReady
+      tags: [semantic-providers]
+      summary: Enable or disable the tested Jev provider
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SemanticProviderReadyInput"
+      responses:
+        "200":
+          description: Updated provider metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderMetadata"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Owner access or same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Provider must have a successful test for its current key revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Semantic provider feature is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /workspaces/{workspaceId}/semantic-providers/jev/test:
+    post:
+      operationId: testSemanticProvider
+      tags: [semantic-providers]
+      summary: Test the Jev API key using a fixed synthetic request
+      description: No caller-controlled host, model, or payload is accepted.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Sanitized test outcome
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticProviderTestResult"
+        "403":
+          description: Owner access or same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: No key is configured or the server-side test cooldown is active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Semantic provider feature is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /workspaces/{workspaceId}/apis/{apiId}/operations:
     get:
       operationId: listOperations
@@ -990,6 +1142,76 @@ components:
           type: string
           format: date-time
       required: [id, schemeName, type, location, parameterName, label, configured, status, destinationHost, createdAt, updatedAt]
+      additionalProperties: false
+    SemanticProviderMetadata:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [jev]
+        configured:
+          type: boolean
+        enabled:
+          type: boolean
+        credentialRevision:
+          type: integer
+          minimum: 0
+        lastTestedAt:
+          type: ["string", "null"]
+          format: date-time
+        lastTestOutcome:
+          type: [string, "null"]
+          enum: [success, rejected, integration_error, inconclusive, null]
+        testedRevision:
+          type: ["integer", "null"]
+          minimum: 0
+        createdAt:
+          type: ["string", "null"]
+          format: date-time
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [provider, configured, enabled, credentialRevision, lastTestedAt, lastTestOutcome, testedRevision, createdAt, updatedAt]
+      additionalProperties: false
+    SemanticProviderKeyInput:
+      type: object
+      properties:
+        secret:
+          type: string
+          minLength: 1
+          maxLength: 8192
+      required: [secret]
+      additionalProperties: false
+    SemanticProviderReadyInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+      additionalProperties: false
+    SemanticProviderTestResult:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [jev]
+        outcome:
+          type: string
+          enum: [success, rejected, integration_error, inconclusive]
+        testedRevision:
+          type: integer
+          minimum: 1
+        testedAt:
+          type: string
+          format: date-time
+      required: [provider, outcome, testedRevision, testedAt]
+      additionalProperties: false
+    SemanticProviderDeleteResult:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+      required: [deleted]
       additionalProperties: false
     CredentialInput:
       type: object

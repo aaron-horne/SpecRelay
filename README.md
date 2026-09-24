@@ -58,10 +58,14 @@ production readiness, or a guarantee that every OpenAPI document is
 compatible. There is no trusted AI path. `READ_LIKE` is descriptive only;
 stored approval and policy still govern execution.
 
-The tracked TypeSafe skill is development guidance only; it is not part of the
-runtime, request path, trust boundary, or production dependency set. Jev is not
-a runtime dependency. A future semantic provider, if introduced, will be
-optional, BYOK, disabled by default, and advisory; the core runs without one.
+The tracked TypeSafe skill is development guidance, not a runtime package.
+The optional Semantic assistance foundation stores a workspace owner's Jev key
+separately from upstream API credentials. It is off by default and supports only
+an explicit, synthetic, owner-initiated connection test when the global rollout
+gate permits it. There is no semantic analysis, enrichment, or trusted AI path:
+import, governance, MCP, and execution do not call Jev. No Jev SDK is required
+at runtime. Future semantic analysis must remain advisory, and the core runs
+without a provider.
 
 ## Identity, tenancy, and credentials
 

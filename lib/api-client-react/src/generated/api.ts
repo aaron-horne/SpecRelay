@@ -40,6 +40,11 @@ import type {
   NotFoundResponse,
   OperationStateUpdate,
   RevokeConnector200,
+  SemanticProviderDeleteResult,
+  SemanticProviderKeyInput,
+  SemanticProviderMetadata,
+  SemanticProviderReadyInput,
+  SemanticProviderTestResult,
   SpecificationImportInput,
   UnauthorizedResponse,
   Workspace,
@@ -1555,6 +1560,411 @@ export const useRevokeCredential = <TError = ErrorType<ErrorResponse | NotFoundR
         TContext
       > => {
       return useMutation(getRevokeCredentialMutationOptions(options));
+    }
+
+export const getGetSemanticProviderUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev`
+}
+
+/**
+ * @summary Get Jev provider configuration metadata
+ */
+export const getSemanticProvider = async (workspaceId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderMetadata> => {
+
+  return customFetch<SemanticProviderMetadata>(getGetSemanticProviderUrl(workspaceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSemanticProviderQueryKey = (workspaceId: string,) => {
+    return [
+    `/api/workspaces/${workspaceId}/semantic-providers/jev`
+    ] as const;
+    }
+
+
+export const getGetSemanticProviderQueryOptions = <TData = Awaited<ReturnType<typeof getSemanticProvider>>, TError = ErrorType<ErrorResponse | NotFoundResponse>>(workspaceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSemanticProvider>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSemanticProviderQueryKey(workspaceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSemanticProvider>>> = ({ signal }) => getSemanticProvider(workspaceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSemanticProvider>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSemanticProviderQueryResult = NonNullable<Awaited<ReturnType<typeof getSemanticProvider>>>
+export type GetSemanticProviderQueryError = ErrorType<ErrorResponse | NotFoundResponse>
+
+
+/**
+ * @summary Get Jev provider configuration metadata
+ */
+
+export function useGetSemanticProvider<TData = Awaited<ReturnType<typeof getSemanticProvider>>, TError = ErrorType<ErrorResponse | NotFoundResponse>>(
+ workspaceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSemanticProvider>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSemanticProviderQueryOptions(workspaceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveSemanticProviderKeyUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev`
+}
+
+/**
+ * Secret input is encrypted at rest, never returned, and invalidates readiness.
+ * @summary Create or replace the Jev API key
+ */
+export const saveSemanticProviderKey = async (workspaceId: string,
+    semanticProviderKeyInput: SemanticProviderKeyInput, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderMetadata> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticProviderMetadata>(getSaveSemanticProviderKeyUrl(workspaceId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticProviderKeyInput)
+  }
+);}
+
+
+
+
+
+export const getSaveSemanticProviderKeyMutationKey = () => ['saveSemanticProviderKey'] as const;
+
+export const getSaveSemanticProviderKeyMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveSemanticProviderKey>>, TError,SaveSemanticProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveSemanticProviderKey>>, TError,SaveSemanticProviderKeyMutationVariables, TContext> => {
+
+const mutationKey = getSaveSemanticProviderKeyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveSemanticProviderKey>>, SaveSemanticProviderKeyMutationVariables> = (props) => {
+          const {workspaceId,data} = props ?? {};
+
+          return  saveSemanticProviderKey(workspaceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveSemanticProviderKeyMutationResult = NonNullable<Awaited<ReturnType<typeof saveSemanticProviderKey>>>
+    export type SaveSemanticProviderKeyMutationBody = BodyType<SemanticProviderKeyInput>
+    export type SaveSemanticProviderKeyMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type SaveSemanticProviderKeyMutationVariables = {workspaceId: string;data: BodyType<SemanticProviderKeyInput>}
+
+    /**
+ * @summary Create or replace the Jev API key
+ */
+export const useSaveSemanticProviderKey = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveSemanticProviderKey>>, TError,SaveSemanticProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveSemanticProviderKey>>,
+        TError,
+        SaveSemanticProviderKeyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveSemanticProviderKeyMutationOptions(options));
+    }
+
+export const getDeleteSemanticProviderKeyUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev`
+}
+
+/**
+ * @summary Delete the Jev API key
+ */
+export const deleteSemanticProviderKey = async (workspaceId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderDeleteResult> => {
+
+  return customFetch<SemanticProviderDeleteResult>(getDeleteSemanticProviderKeyUrl(workspaceId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSemanticProviderKeyMutationKey = () => ['deleteSemanticProviderKey'] as const;
+
+export const getDeleteSemanticProviderKeyMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSemanticProviderKey>>, TError,DeleteSemanticProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSemanticProviderKey>>, TError,DeleteSemanticProviderKeyMutationVariables, TContext> => {
+
+const mutationKey = getDeleteSemanticProviderKeyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSemanticProviderKey>>, DeleteSemanticProviderKeyMutationVariables> = (props) => {
+          const {workspaceId} = props ?? {};
+
+          return  deleteSemanticProviderKey(workspaceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSemanticProviderKeyMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSemanticProviderKey>>>
+
+    export type DeleteSemanticProviderKeyMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type DeleteSemanticProviderKeyMutationVariables = {workspaceId: string}
+
+    /**
+ * @summary Delete the Jev API key
+ */
+export const useDeleteSemanticProviderKey = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSemanticProviderKey>>, TError,DeleteSemanticProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSemanticProviderKey>>,
+        TError,
+        DeleteSemanticProviderKeyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteSemanticProviderKeyMutationOptions(options));
+    }
+
+export const getSetSemanticProviderReadyUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev/ready`
+}
+
+/**
+ * @summary Enable or disable the tested Jev provider
+ */
+export const setSemanticProviderReady = async (workspaceId: string,
+    semanticProviderReadyInput: SemanticProviderReadyInput, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderMetadata> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticProviderMetadata>(getSetSemanticProviderReadyUrl(workspaceId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticProviderReadyInput)
+  }
+);}
+
+
+
+
+
+export const getSetSemanticProviderReadyMutationKey = () => ['setSemanticProviderReady'] as const;
+
+export const getSetSemanticProviderReadyMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setSemanticProviderReady>>, TError,SetSemanticProviderReadyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setSemanticProviderReady>>, TError,SetSemanticProviderReadyMutationVariables, TContext> => {
+
+const mutationKey = getSetSemanticProviderReadyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setSemanticProviderReady>>, SetSemanticProviderReadyMutationVariables> = (props) => {
+          const {workspaceId,data} = props ?? {};
+
+          return  setSemanticProviderReady(workspaceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetSemanticProviderReadyMutationResult = NonNullable<Awaited<ReturnType<typeof setSemanticProviderReady>>>
+    export type SetSemanticProviderReadyMutationBody = BodyType<SemanticProviderReadyInput>
+    export type SetSemanticProviderReadyMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type SetSemanticProviderReadyMutationVariables = {workspaceId: string;data: BodyType<SemanticProviderReadyInput>}
+
+    /**
+ * @summary Enable or disable the tested Jev provider
+ */
+export const useSetSemanticProviderReady = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setSemanticProviderReady>>, TError,SetSemanticProviderReadyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setSemanticProviderReady>>,
+        TError,
+        SetSemanticProviderReadyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetSemanticProviderReadyMutationOptions(options));
+    }
+
+export const getTestSemanticProviderUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/semantic-providers/jev/test`
+}
+
+/**
+ * No caller-controlled host, model, or payload is accepted.
+ * @summary Test the Jev API key using a fixed synthetic request
+ */
+export const testSemanticProvider = async (workspaceId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticProviderTestResult> => {
+
+  return customFetch<SemanticProviderTestResult>(getTestSemanticProviderUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTestSemanticProviderMutationKey = () => ['testSemanticProvider'] as const;
+
+export const getTestSemanticProviderMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testSemanticProvider>>, TError,TestSemanticProviderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testSemanticProvider>>, TError,TestSemanticProviderMutationVariables, TContext> => {
+
+const mutationKey = getTestSemanticProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testSemanticProvider>>, TestSemanticProviderMutationVariables> = (props) => {
+          const {workspaceId} = props ?? {};
+
+          return  testSemanticProvider(workspaceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestSemanticProviderMutationResult = NonNullable<Awaited<ReturnType<typeof testSemanticProvider>>>
+
+    export type TestSemanticProviderMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type TestSemanticProviderMutationVariables = {workspaceId: string}
+
+    /**
+ * @summary Test the Jev API key using a fixed synthetic request
+ */
+export const useTestSemanticProvider = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testSemanticProvider>>, TError,TestSemanticProviderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testSemanticProvider>>,
+        TError,
+        TestSemanticProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getTestSemanticProviderMutationOptions(options));
     }
 
 export const getListOperationsUrl = (workspaceId: string,

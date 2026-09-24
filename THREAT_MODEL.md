@@ -32,7 +32,12 @@ The current milestone assumes every imported document, MCP argument, browser req
 7. MCP: discovery and invocation independently enforce workspace membership and stored approval.
 8. Execution leasing: the database is the coordination boundary for dispatch and specification replacement across server instances; a lease is valid only for its exact workspace, API source, specification version, and operation.
 
-TypeSafe is development guidance only, and Jev is not a runtime dependency.
-There is no semantic provider in the current trust boundary. Any future
-provider must be optional, BYOK, disabled by default, advisory, and unable to
-override stored approval, policy, tenancy, or outbound-request controls.
+TypeSafe is development guidance, not a runtime package. The optional
+semantic-provider foundation adds a separate encrypted workspace credential
+and a fixed-destination, owner-initiated synthetic connection test. Browser
+mutations require same-origin checks; the test must not send workspace data,
+OpenAPI text, upstream credentials, or user input. Provider failures and
+responses must be bounded and redacted. There is no automatic provider call
+or semantic analysis in the current import, governance, MCP, or execution
+paths. Any future analysis must be advisory and unable to override stored
+approval, policy, tenancy, or outbound-request controls.

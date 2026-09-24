@@ -35,9 +35,23 @@ deployment; completed items do not imply general production readiness.
       composite foreign keys. Production catalog checks confirmed all nine
       validated and enabled, the Stage 1 foundation intact, and all seven older
       tenant-isolation foreign keys still validated. The hardened semantic
-      deletion-readiness gate now passes. Managed Publish did not replay the
+      deletion-readiness gate passed at that nine-child stage; the new
+      ten-child gate remains unverified in production. Managed Publish did not replay the
       SQL migration files' defense-in-depth trigger DDL; no table truncation
       was selected for either stage.
+- [ ] Phase 1B: keep `SEMANTIC_PROVIDERS_ENABLED` unset/false. Review the
+      managed Publish diff before applying it; stage the new
+      `semantic_provider_configs` table, its workspace/provider unique key,
+      live-marker CHECK, and columns first. In a separate step, stage its
+      `(workspace_id, workspace_is_live)` composite foreign key only after
+      verifying the existing parent `(id, is_live)` unique key. Select no
+      truncation or destructive data operation.
+- [ ] Before enabling any Phase 1B test, verify the actual staging catalog
+      contains the validated/enabled tenth live-workspace FK and CHECK, plus
+      the previously verified nine child guards and seven tenant FKs. Confirm
+      workspace deletion remains guarded, OWNER access and CSRF work, and no
+      automatic Jev calls occur. Only then opt in a deliberately selected
+      workspace for an explicit synthetic test; leave semantic analysis off.
 - [ ] Run tenant-isolation tests for workspace membership, resource IDs,
       roles, catalog, credentials, audit data, and MCP execution.
 - [ ] Verify production Clerk configuration and canonical `auth.userId`
