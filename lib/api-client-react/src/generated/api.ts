@@ -40,7 +40,9 @@ import type {
   NotFoundResponse,
   OperationStateUpdate,
   RevokeConnector200,
-  SemanticAnalysisConfirmation,
+  SemanticAnalysisDispatchInput,
+  SemanticAnalysisDispatchTokenResponse,
+  SemanticAnalysisPreflightConfirmation,
   SemanticAnalysisPreflightResponse,
   SemanticAnalysisProposal,
   SemanticAnalysisResult,
@@ -2059,7 +2061,7 @@ export const getPrepareSemanticAnalysisUrl = (workspaceId: string,
 }
 
 /**
- * Returns a short-lived, single-use confirmation token and the exact outbound payload. Preparation does not call Jev.
+ * Returns a short-lived review handle and the exact outbound payload. This handle cannot authorize Jev dispatch.
  * @summary Prepare the exact payload for one-operation Jev analysis
  */
 export const prepareSemanticAnalysis = async (workspaceId: string,
@@ -2127,6 +2129,100 @@ export const usePrepareSemanticAnalysis = <TError = ErrorType<BadRequestResponse
       return useMutation(getPrepareSemanticAnalysisMutationOptions(options));
     }
 
+export const getConfirmSemanticAnalysisUrl = (workspaceId: string,
+    apiId: string,
+    operationId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/operations/${operationId}/semantic-analysis/confirm`
+}
+
+/**
+ * OWNER-only, same-origin exchange of the review handle for a distinct short-lived, single-use dispatch token after explicit sensitive-data confirmation.
+ * @summary Confirm reviewed payload and authorize a single Jev dispatch
+ */
+export const confirmSemanticAnalysis = async (workspaceId: string,
+    apiId: string,
+    operationId: string,
+    semanticAnalysisPreflightConfirmation: SemanticAnalysisPreflightConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisDispatchTokenResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticAnalysisDispatchTokenResponse>(getConfirmSemanticAnalysisUrl(workspaceId,apiId,operationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticAnalysisPreflightConfirmation)
+  }
+);}
+
+
+
+
+
+export const getConfirmSemanticAnalysisMutationKey = () => ['confirmSemanticAnalysis'] as const;
+
+export const getConfirmSemanticAnalysisMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmSemanticAnalysis>>, TError,ConfirmSemanticAnalysisMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmSemanticAnalysis>>, TError,ConfirmSemanticAnalysisMutationVariables, TContext> => {
+
+const mutationKey = getConfirmSemanticAnalysisMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmSemanticAnalysis>>, ConfirmSemanticAnalysisMutationVariables> = (props) => {
+          const {workspaceId,apiId,operationId,data} = props ?? {};
+
+          return  confirmSemanticAnalysis(workspaceId,apiId,operationId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmSemanticAnalysisMutationResult = NonNullable<Awaited<ReturnType<typeof confirmSemanticAnalysis>>>
+    export type ConfirmSemanticAnalysisMutationBody = BodyType<SemanticAnalysisPreflightConfirmation>
+    export type ConfirmSemanticAnalysisMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type ConfirmSemanticAnalysisMutationVariables = {workspaceId: string;apiId: string;operationId: string;data: BodyType<SemanticAnalysisPreflightConfirmation>}
+
+    /**
+ * @summary Confirm reviewed payload and authorize a single Jev dispatch
+ */
+export const useConfirmSemanticAnalysis = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmSemanticAnalysis>>, TError,ConfirmSemanticAnalysisMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmSemanticAnalysis>>,
+        TError,
+        ConfirmSemanticAnalysisMutationVariables,
+        TContext
+      > => {
+      return useMutation(getConfirmSemanticAnalysisMutationOptions(options));
+    }
+
 export const getAnalyzeApiOperationUrl = (workspaceId: string,
     apiId: string,
     operationId: string,) => {
@@ -2138,13 +2234,13 @@ export const getAnalyzeApiOperationUrl = (workspaceId: string,
 }
 
 /**
- * OWNER-only, same-origin, explicit confirmation that the reviewed payload contains no sensitive or customer data, using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
+ * OWNER-only, same-origin, using a short-lived single-use dispatch token issued only after explicit confirmation that the reviewed payload contains no sensitive, customer, or session data. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
  * @summary Manually analyze one imported operation with Jev
  */
 export const analyzeApiOperation = async (workspaceId: string,
     apiId: string,
     operationId: string,
-    semanticAnalysisConfirmation: SemanticAnalysisConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisResult> => {
+    semanticAnalysisDispatchInput: SemanticAnalysisDispatchInput, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2165,7 +2261,7 @@ return customFetch<SemanticAnalysisResult>(getAnalyzeApiOperationUrl(workspaceId
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(semanticAnalysisConfirmation)
+    body: JSON.stringify(semanticAnalysisDispatchInput)
   }
 );}
 
@@ -2203,9 +2299,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type AnalyzeApiOperationMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeApiOperation>>>
-    export type AnalyzeApiOperationMutationBody = BodyType<SemanticAnalysisConfirmation>
+    export type AnalyzeApiOperationMutationBody = BodyType<SemanticAnalysisDispatchInput>
     export type AnalyzeApiOperationMutationError = ErrorType<ErrorResponse | NotFoundResponse>
-    export type AnalyzeApiOperationMutationVariables = {workspaceId: string;apiId: string;operationId: string;data: BodyType<SemanticAnalysisConfirmation>}
+    export type AnalyzeApiOperationMutationVariables = {workspaceId: string;apiId: string;operationId: string;data: BodyType<SemanticAnalysisDispatchInput>}
 
     /**
  * @summary Manually analyze one imported operation with Jev

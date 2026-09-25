@@ -31,6 +31,8 @@ const migrationNames = [
   "0017_preflight_reject_deleted_workspace_writes.sql",
   "0018_short_preflight_workspace_write_guard.sql",
   "0019_semantic_denials_and_preflight_guard_cleanup.sql",
+  "0020_semantic_analysis_dispatch_token_kinds.sql",
+  "0021_semantic_denial_dispatch_category.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -146,6 +148,9 @@ describe("migration reconciliation", () => {
       const migration = await readFile(path.join(migrationsDirectory, name), "utf8");
       const permittedGuardCleanup = migration.replace(
         /DROP TRIGGER IF EXISTS "semantic_analysis_preflight_tokens_reject_deleted_workspace_write"\s+ON "semantic_analysis_preflight_tokens";/g,
+        "",
+      ).replace(
+        /DROP CONSTRAINT IF EXISTS "semantic_analysis_denial_events_category_check",/g,
         "",
       );
       expect(permittedGuardCleanup).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE)\b/im);
@@ -304,7 +309,8 @@ describe("migration reconciliation", () => {
       try {
         await client.query(`CREATE SCHEMA "${schema}"`);
         await client.query(`SET search_path TO "${schema}", public`);
-        await applyMigrations(client, schema);
+        await applyMigrations(client, schema, 0, 19);
+        await applyMigrations(client, schema, 19, 20);
         await expectConnectorSafeguards(client, true);
         await expectWorkspaceLiveGuards(client, 12, 12);
         const deletedWorkspaceTriggers = await client.query<{ count: number }>(`
@@ -339,7 +345,56 @@ describe("migration reconciliation", () => {
         expect(denialAuditColumns.rows.map((row) => row.column_name)).toEqual([
           "id", "actor_id", "request_category", "reason_class", "created_at",
         ]);
-        await applyMigrations(client, schema, 19, 20);
+        await client.query(
+          "INSERT INTO workspaces (id, name, is_live) VALUES ('f0000000-0000-4000-8000-000000000010', 'Live token fixture', true)",
+        );
+        await client.query(`
+          INSERT INTO semantic_analysis_preflight_tokens
+            (token_hash, actor_id, workspace_id, workspace_is_live, api_id, operation_id,
+             specification_id, document_hash, credential_id, credential_revision,
+             payload_digest, expires_at)
+          VALUES ('legacy-preflight-hash', 'fixture-user', 'f0000000-0000-4000-8000-000000000010',
+                  true, 'f0000000-0000-4000-8000-000000000011',
+                  'f0000000-0000-4000-8000-000000000012',
+                  'f0000000-0000-4000-8000-000000000013',
+                  'fixture-document-hash', 'f0000000-0000-4000-8000-000000000014',
+                  1, 'fixture-payload-digest', now() + interval '1 minute')
+        `);
+        await applyMigrations(client, schema, 20, 21);
+        await applyMigrations(client, schema, 21, 22);
+        await client.query(`
+          INSERT INTO semantic_analysis_denial_events (request_category, reason_class)
+          VALUES ('dispatch', 'request_rejected')
+        `);
+        const legacyToken = await client.query<{ token_kind: string }>(`
+          SELECT token_kind FROM semantic_analysis_preflight_tokens
+          WHERE token_hash = 'legacy-preflight-hash'
+        `);
+        expect(legacyToken.rows).toEqual([{ token_kind: "preflight" }]);
+        await client.query(`
+          INSERT INTO semantic_analysis_preflight_tokens
+            (token_hash, token_kind, actor_id, workspace_id, workspace_is_live, api_id, operation_id,
+             specification_id, document_hash, credential_id, credential_revision,
+             payload_digest, expires_at)
+          VALUES ('dispatch-kind-hash', 'dispatch', 'fixture-user', 'f0000000-0000-4000-8000-000000000010',
+                  true, 'f0000000-0000-4000-8000-000000000011',
+                  'f0000000-0000-4000-8000-000000000012',
+                  'f0000000-0000-4000-8000-000000000013',
+                  'fixture-document-hash', 'f0000000-0000-4000-8000-000000000014',
+                  1, 'fixture-payload-digest', now() + interval '1 minute')
+        `);
+        await expect(client.query(`
+          INSERT INTO semantic_analysis_preflight_tokens
+            (token_hash, token_kind, actor_id, workspace_id, workspace_is_live, api_id, operation_id,
+             specification_id, document_hash, credential_id, credential_revision,
+             payload_digest, expires_at)
+          VALUES ('invalid-kind-hash', 'invalid', 'fixture-user', 'f0000000-0000-4000-8000-000000000010',
+                  true, 'f0000000-0000-4000-8000-000000000011',
+                  'f0000000-0000-4000-8000-000000000012',
+                  'f0000000-0000-4000-8000-000000000013',
+                  'fixture-document-hash', 'f0000000-0000-4000-8000-000000000014',
+                  1, 'fixture-payload-digest', now() + interval '1 minute')
+        `)).rejects.toThrow();
         const retainedGuard = await client.query<{ tgname: string }>(`
           SELECT tgname FROM pg_trigger
           WHERE tgrelid = 'semantic_analysis_preflight_tokens'::regclass AND NOT tgisinternal

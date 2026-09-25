@@ -6,6 +6,7 @@ export const semanticAnalysisPreflightTokensTable = pgTable(
   "semantic_analysis_preflight_tokens",
   {
     tokenHash: text("token_hash").primaryKey(),
+    tokenKind: text("token_kind").notNull().default("preflight"),
     actorId: text("actor_id").notNull(),
     workspaceId: uuid("workspace_id").notNull().references(() => workspacesTable.id, { onDelete: "cascade" }),
     workspaceIsLive: boolean("workspace_is_live").notNull().default(true),
@@ -22,6 +23,7 @@ export const semanticAnalysisPreflightTokensTable = pgTable(
   },
   (table) => [
     index("semantic_analysis_preflight_expiry_idx").on(table.expiresAt),
+    check("semantic_analysis_preflight_tokens_kind_check", sql`${table.tokenKind} IN ('preflight', 'dispatch')`),
     foreignKey({
       columns: [table.workspaceId, table.workspaceIsLive],
       foreignColumns: [workspacesTable.id, workspacesTable.isLive],

@@ -639,14 +639,14 @@ paths:
       operationId: prepareSemanticAnalysis
       tags: [semantic-providers]
       summary: Prepare the exact payload for one-operation Jev analysis
-      description: Returns a short-lived, single-use confirmation token and the exact outbound payload. Preparation does not call Jev.
+      description: Returns a short-lived review handle and the exact outbound payload. This handle cannot authorize Jev dispatch.
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/ApiId"
         - $ref: "#/components/parameters/OperationId"
       responses:
         "200":
-          description: Exact outbound Jev payload and confirmation token
+          description: Exact outbound Jev payload and non-dispatching review handle
           content:
             application/json:
               schema:
@@ -673,15 +673,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /workspaces/{workspaceId}/apis/{apiId}/operations/{operationId}/semantic-analysis/confirm:
+    post:
+      operationId: confirmSemanticAnalysis
+      tags: [semantic-providers]
+      summary: Confirm reviewed payload and authorize a single Jev dispatch
+      description: OWNER-only, same-origin exchange of the review handle for a distinct short-lived, single-use dispatch token after explicit sensitive-data confirmation.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/OperationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SemanticAnalysisPreflightConfirmation"
+      responses:
+        "200":
+          description: Single-use Jev dispatch token bound to the reviewed operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticAnalysisDispatchTokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Workspace owner and same-origin request required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Review handle is invalid, expired, consumed, or stale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Jev analysis is unavailable or disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /workspaces/{workspaceId}/apis/{apiId}/operations/{operationId}/semantic-analysis:
     post:
       operationId: analyzeApiOperation
       tags: [semantic-providers]
       summary: Manually analyze one imported operation with Jev
       description: >
-        OWNER-only, same-origin, explicit confirmation that the reviewed
-        payload contains no sensitive or customer data, using a short-lived
-        preflight token. Sends only the exact prepared payload. Jev selects
+        OWNER-only, same-origin, using a short-lived single-use dispatch token
+        issued only after explicit confirmation that the reviewed payload
+        contains no sensitive, customer, or session data. Sends only the exact
+        prepared payload. Jev selects
         among deterministic source-text candidates or abstains; it does not
         generate prose, execute operations, alter MCP, or modify the import.
       parameters:
@@ -693,7 +739,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SemanticAnalysisConfirmation"
+              $ref: "#/components/schemas/SemanticAnalysisDispatchInput"
       responses:
         "200":
           description: Typed Jev judgment or abstention
@@ -1452,22 +1498,35 @@ components:
             - type: "null"
       required: [outcome, specificationId, operationId, confidence, uncertainty, proposal]
       additionalProperties: false
-    SemanticAnalysisConfirmation:
+    SemanticAnalysisPreflightConfirmation:
       type: object
       properties:
-        preflightToken: { type: string, minLength: 32, maxLength: 128 }
+        preflightHandle: { type: string, minLength: 32, maxLength: 128 }
         confirmedNoSensitiveData: { type: boolean, const: true }
-      required: [preflightToken, confirmedNoSensitiveData]
+      required: [preflightHandle, confirmedNoSensitiveData]
+      additionalProperties: false
+    SemanticAnalysisDispatchInput:
+      type: object
+      properties:
+        dispatchToken: { type: string, minLength: 32, maxLength: 128 }
+      required: [dispatchToken]
       additionalProperties: false
     SemanticAnalysisPreflightResponse:
       type: object
       properties:
-        preflightToken: { type: string, minLength: 32, maxLength: 128 }
+        preflightHandle: { type: string, minLength: 32, maxLength: 128 }
         expiresAt: { type: string, format: date-time }
         payload:
           type: object
           additionalProperties: true
-      required: [preflightToken, expiresAt, payload]
+      required: [preflightHandle, expiresAt, payload]
+      additionalProperties: false
+    SemanticAnalysisDispatchTokenResponse:
+      type: object
+      properties:
+        dispatchToken: { type: string, minLength: 32, maxLength: 128 }
+        expiresAt: { type: string, format: date-time }
+      required: [dispatchToken, expiresAt]
       additionalProperties: false
     SemanticProposalDecision:
       type: object

@@ -3,6 +3,9 @@ import {
   AnalyzeApiOperationBody,
   AnalyzeApiOperationParams,
   AnalyzeApiOperationResponse,
+  ConfirmSemanticAnalysisBody,
+  ConfirmSemanticAnalysisParams,
+  ConfirmSemanticAnalysisResponse,
   DecideSemanticProposalBody,
   DecideSemanticProposalParams,
   DecideSemanticProposalResponse,
@@ -13,7 +16,7 @@ import {
 } from "@workspace/api-zod";
 import { actorId, requireSameOrigin, requireWorkspaceMembership, requireWorkspaceOwner } from "../middlewares/auth";
 import { SemanticAnalysisService } from "../services/semantic-analysis";
-import { recordSemanticAnalysisDenial } from "../services/semantic-analysis-denial-audit";
+import { recordSemanticAnalysisDenial, semanticAnalysisRequestCategory } from "../services/semantic-analysis-denial-audit";
 
 const router: IRouter = Router();
 const service = new SemanticAnalysisService();
@@ -32,7 +35,7 @@ async function recordEarlyDenial(req: Request, reason: "owner_required" | "origi
 
 async function requireAnalysisOwner(req: Request, res: Response, next: NextFunction): Promise<void> {
   let passed = false;
-  const requestCategory = req.path.endsWith("/preflight") ? "preflight" : "confirmation";
+  const requestCategory = semanticAnalysisRequestCategory(req.method, `${req.baseUrl}${req.path}`) ?? "dispatch";
   await requireWorkspaceOwner(req, res, () => { passed = true; next(); }, () =>
     recordSemanticAnalysisDenial(actorId(req), requestCategory, "workspace_unavailable"));
   if (!passed) await recordEarlyDenial(req, "owner_required");
@@ -70,6 +73,36 @@ router.post(
 );
 
 router.post(
+  `${base}/operations/:operationId/semantic-analysis/confirm`,
+  requireAnalysisOwner,
+  requireAnalysisOrigin,
+  async (req, res): Promise<void> => {
+    const params = ConfirmSemanticAnalysisParams.safeParse(req.params);
+    const input = ConfirmSemanticAnalysisBody.strict().safeParse(req.body);
+    if (!params.success || !input.success) {
+      if (!isRecordBody(req.body) || req.body.confirmedNoSensitiveData !== true) {
+        try {
+          await service.recordConfirmationDenial(actorId(req));
+        } catch { /* Preserve the original request validation response. */ }
+      } else {
+        await recordEarlyDenial(req, "invalid_request");
+      }
+      res.status(400).json({ error: "A valid reviewed payload handle and explicit confirmation are required", code: "INVALID_INPUT" });
+      return;
+    }
+    const result = await service.confirm(
+      params.data.workspaceId,
+      params.data.apiId,
+      params.data.operationId,
+      actorId(req),
+      input.data.preflightHandle,
+      input.data.confirmedNoSensitiveData,
+    );
+    res.json(ConfirmSemanticAnalysisResponse.parse(result));
+  },
+);
+
+router.post(
   `${base}/operations/:operationId/semantic-analysis`,
   requireAnalysisOwner,
   requireAnalysisOrigin,
@@ -82,15 +115,8 @@ router.post(
     }
     const input = AnalyzeApiOperationBody.strict().safeParse(req.body);
     if (!input.success) {
-      if ((req.body as { confirmedNoSensitiveData?: unknown } | null)?.confirmedNoSensitiveData === false ||
-          !isRecordBody(req.body) || !("confirmedNoSensitiveData" in req.body)) {
-        try {
-          await service.recordConfirmationDenial(actorId(req));
-        } catch { /* Preserve the original request validation response. */ }
-      } else {
-        await recordEarlyDenial(req, "invalid_request");
-      }
-      res.status(400).json({ error: "A valid preflight token is required", code: "INVALID_INPUT" });
+      await recordEarlyDenial(req, "invalid_request");
+      res.status(400).json({ error: "A valid single-use dispatch token is required", code: "INVALID_INPUT" });
       return;
     }
     const result = await service.analyze(
@@ -98,8 +124,7 @@ router.post(
       params.data.apiId,
       params.data.operationId,
       actorId(req),
-      input.data.preflightToken,
-      input.data.confirmedNoSensitiveData,
+      input.data.dispatchToken,
     );
     res.json(AnalyzeApiOperationResponse.parse(result));
   },

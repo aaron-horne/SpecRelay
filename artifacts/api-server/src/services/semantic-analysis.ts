@@ -267,12 +267,12 @@ export class SemanticAnalysisService {
           throw new ServiceError("Operation exceeds the safe preparation size limit", 400, "SEMANTIC_ANALYSIS_REDACTION_FAILED");
         }
         const payloadDigest = digest(payload);
-        const token = randomUUID();
+        const preflightHandle = randomUUID();
         const expiresAt = new Date(Date.now() + PREFLIGHT_TTL_MS);
         await tx.delete(semanticAnalysisPreflightTokensTable)
           .where(lt(semanticAnalysisPreflightTokensTable.expiresAt, new Date()));
         await tx.insert(semanticAnalysisPreflightTokensTable).values({
-          tokenHash: digest(token), actorId, workspaceId, workspaceIsLive: true, apiId, operationId,
+          tokenHash: digest(preflightHandle), tokenKind: "preflight", actorId, workspaceId, workspaceIsLive: true, apiId, operationId,
           specificationId: specification.id, documentHash: specification.documentHash,
           credentialId: credential.id, credentialRevision: credential.credentialRevision,
           payloadDigest, expiresAt,
@@ -282,7 +282,7 @@ export class SemanticAnalysisService {
           resourceType: "api_operation", resourceId: operationId,
           metadata: { actorId, apiId, specificationId: specification.id, credentialRevision: credential.credentialRevision },
         });
-        return { preflightToken: token, expiresAt, payload };
+        return { preflightHandle, expiresAt, payload };
       });
     } catch (error) {
       try {
@@ -292,25 +292,96 @@ export class SemanticAnalysisService {
     }
   }
 
+  async confirm(
+    workspaceId: string,
+    apiId: string,
+    operationId: string,
+    actorId: string,
+    preflightHandle: string,
+    confirmedNoSensitiveData: boolean,
+  ) {
+    if (confirmedNoSensitiveData !== true) {
+      await this.recordConfirmationDenial(actorId);
+      throw new ServiceError(
+        "Explicit confirmation that the reviewed payload contains no sensitive, customer, or session data is required",
+        400,
+        "SEMANTIC_ANALYSIS_CONFIRMATION_REQUIRED",
+      );
+    }
+    const preflightHash = digest(preflightHandle);
+    const dispatchToken = randomUUID();
+    try {
+      return await db.transaction(async (tx) => {
+        await acquireApiLock(tx, workspaceId, apiId);
+        await lockOwner(tx, workspaceId, actorId);
+        requireRollout(workspaceId);
+        const [handle] = await tx.select().from(semanticAnalysisPreflightTokensTable).where(and(
+          eq(semanticAnalysisPreflightTokensTable.tokenHash, preflightHash),
+          eq(semanticAnalysisPreflightTokensTable.tokenKind, "preflight"),
+          eq(semanticAnalysisPreflightTokensTable.actorId, actorId),
+          eq(semanticAnalysisPreflightTokensTable.workspaceId, workspaceId),
+          eq(semanticAnalysisPreflightTokensTable.apiId, apiId),
+          eq(semanticAnalysisPreflightTokensTable.operationId, operationId),
+        )).for("update").limit(1);
+        if (!handle || handle.consumedAt || handle.expiresAt.getTime() <= Date.now()) {
+          throw new ServiceError("Preflight handle is invalid, expired, or already used", 409, "SEMANTIC_ANALYSIS_PREFLIGHT_INVALID");
+        }
+        const { specification, operation } = await currentSourceOperation(tx, workspaceId, apiId, operationId);
+        const { row: credential } = await requireReadyCredential(tx, workspaceId);
+        const prepared = operationInput(operation);
+        const payload = serializeJevRequest(prepared.input, prepared.candidates);
+        if (Buffer.byteLength(JSON.stringify(payload), "utf8") > 8_192) {
+          throw new ServiceError("Operation exceeds the safe preparation size limit", 400, "SEMANTIC_ANALYSIS_REDACTION_FAILED");
+        }
+        if (specification.id !== handle.specificationId || specification.documentHash !== handle.documentHash ||
+            credential.id !== handle.credentialId || credential.credentialRevision !== handle.credentialRevision ||
+            digest(payload) !== handle.payloadDigest) {
+          throw new ServiceError("Operation, specification, or Jev configuration changed after preflight", 409, "SEMANTIC_ANALYSIS_PREFLIGHT_STALE");
+        }
+        const consumedAt = new Date();
+        await tx.update(semanticAnalysisPreflightTokensTable).set({ consumedAt })
+          .where(and(
+            eq(semanticAnalysisPreflightTokensTable.tokenHash, preflightHash),
+            eq(semanticAnalysisPreflightTokensTable.tokenKind, "preflight"),
+            isNull(semanticAnalysisPreflightTokensTable.consumedAt),
+          ));
+        const expiresAt = new Date(Date.now() + PREFLIGHT_TTL_MS);
+        await tx.insert(semanticAnalysisPreflightTokensTable).values({
+          tokenHash: digest(dispatchToken), tokenKind: "dispatch", actorId, workspaceId, workspaceIsLive: true,
+          apiId, operationId, specificationId: specification.id, documentHash: specification.documentHash,
+          credentialId: credential.id, credentialRevision: credential.credentialRevision,
+          payloadDigest: handle.payloadDigest, expiresAt,
+        });
+        await tx.insert(auditEventsTable).values({
+          workspaceId, eventType: "semantic_analysis.dispatch_authorized",
+          resourceType: "api_operation", resourceId: operationId,
+          metadata: { actorId, apiId, specificationId: specification.id, credentialRevision: credential.credentialRevision },
+        });
+        return { dispatchToken, expiresAt };
+      });
+    } catch (error) {
+      try {
+        await auditDenied(workspaceId, apiId, operationId, actorId, reasonCategory(error), "semantic_analysis.request_denied");
+      } catch { /* Preserve the original, non-sensitive confirmation error. */ }
+      throw error;
+    }
+  }
+
   async analyze(
     workspaceId: string,
     apiId: string,
     operationId: string,
     actorId: string,
-    preflightToken: string,
-    confirmedNoSensitiveData: boolean,
+    dispatchToken: string,
   ) {
-    if (confirmedNoSensitiveData !== true) {
-      await this.recordConfirmationDenial(actorId);
-      throw new ServiceError("Explicit confirmation that the reviewed payload contains no sensitive or customer data is required", 400, "SEMANTIC_ANALYSIS_CONFIRMATION_REQUIRED");
-    }
-    const tokenHash = digest(preflightToken);
+    const tokenHash = digest(dispatchToken);
     const reservation = await db.transaction(async (tx) => {
       await acquireApiLock(tx, workspaceId, apiId);
       await lockOwner(tx, workspaceId, actorId);
       requireRollout(workspaceId);
       const [token] = await tx.select().from(semanticAnalysisPreflightTokensTable).where(and(
         eq(semanticAnalysisPreflightTokensTable.tokenHash, tokenHash),
+        eq(semanticAnalysisPreflightTokensTable.tokenKind, "dispatch"),
         eq(semanticAnalysisPreflightTokensTable.actorId, actorId),
         eq(semanticAnalysisPreflightTokensTable.workspaceId, workspaceId),
         eq(semanticAnalysisPreflightTokensTable.apiId, apiId),
@@ -339,7 +410,11 @@ export class SemanticAnalysisService {
       if (recent) throw new ServiceError("Jev analysis rate limit is active", 409, "SEMANTIC_ANALYSIS_RATE_LIMITED");
       const reservationId = randomUUID();
       await tx.update(semanticAnalysisPreflightTokensTable).set({ consumedAt: new Date() })
-        .where(and(eq(semanticAnalysisPreflightTokensTable.tokenHash, tokenHash), isNull(semanticAnalysisPreflightTokensTable.consumedAt)));
+        .where(and(
+          eq(semanticAnalysisPreflightTokensTable.tokenHash, tokenHash),
+          eq(semanticAnalysisPreflightTokensTable.tokenKind, "dispatch"),
+          isNull(semanticAnalysisPreflightTokensTable.consumedAt),
+        ));
       const metadata = {
         actorId, provider: PROVIDER, apiId, specificationId: specification.id, operationId,
         credentialRevision: credential.credentialRevision, reservationId,

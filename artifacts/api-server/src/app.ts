@@ -72,7 +72,7 @@ app.use(
       ? (error as { status?: unknown }).status
       : undefined;
     if (semanticRequest && (status === 400 || status === 413)) {
-      await recordSemanticAnalysisDenial(null, semanticRequest, "request_rejected");
+      await recordSemanticAnalysisDenial(null, semanticRequest, "request_rejected", req);
     }
     if (error instanceof OpenApiValidationError) {
       res.status(error.code === "DOCUMENT_TOO_LARGE" ? 413 : 400).json({

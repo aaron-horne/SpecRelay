@@ -12,7 +12,7 @@ export interface SemanticAnalysisPreflightResponse {
      * @minLength 32
      * @maxLength 128
      */
-  preflightToken: string;
+  preflightHandle: string;
   expiresAt: Date;
   payload: SemanticAnalysisPreflightResponsePayload;
 }

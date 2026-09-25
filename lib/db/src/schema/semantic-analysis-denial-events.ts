@@ -13,7 +13,7 @@ export const semanticAnalysisDenialEventsTable = pgTable(
   (table) => [
     index("semantic_analysis_denial_events_created_idx").on(table.createdAt),
     index("semantic_analysis_denial_events_actor_created_idx").on(table.actorId, table.createdAt),
-    check("semantic_analysis_denial_events_category_check", sql`${table.requestCategory} IN ('preflight', 'confirmation')`),
+    check("semantic_analysis_denial_events_category_check", sql`${table.requestCategory} IN ('preflight', 'confirmation', 'dispatch')`),
     check("semantic_analysis_denial_events_reason_check", sql`${table.reasonClass} IN ('unauthenticated', 'workspace_unavailable', 'payload_confirmation_required', 'request_rejected')`),
   ],
 );

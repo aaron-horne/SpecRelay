@@ -473,13 +473,21 @@ export interface SemanticAnalysisResult {
   proposal: SemanticAnalysisProposal | null;
 }
 
-export interface SemanticAnalysisConfirmation {
+export interface SemanticAnalysisPreflightConfirmation {
   /**
      * @minLength 32
      * @maxLength 128
      */
-  preflightToken: string;
+  preflightHandle: string;
   confirmedNoSensitiveData: true;
+}
+
+export interface SemanticAnalysisDispatchInput {
+  /**
+     * @minLength 32
+     * @maxLength 128
+     */
+  dispatchToken: string;
 }
 
 export type SemanticAnalysisPreflightResponsePayload = { [key: string]: unknown };
@@ -489,9 +497,18 @@ export interface SemanticAnalysisPreflightResponse {
      * @minLength 32
      * @maxLength 128
      */
-  preflightToken: string;
+  preflightHandle: string;
   expiresAt: string;
   payload: SemanticAnalysisPreflightResponsePayload;
+}
+
+export interface SemanticAnalysisDispatchTokenResponse {
+  /**
+     * @minLength 32
+     * @maxLength 128
+     */
+  dispatchToken: string;
+  expiresAt: string;
 }
 
 export type SemanticProposalDecisionDecision = typeof SemanticProposalDecisionDecision[keyof typeof SemanticProposalDecisionDecision];

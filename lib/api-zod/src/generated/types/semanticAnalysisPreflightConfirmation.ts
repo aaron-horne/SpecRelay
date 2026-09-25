@@ -6,11 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface SemanticAnalysisConfirmation {
+export interface SemanticAnalysisPreflightConfirmation {
   /**
      * @minLength 32
      * @maxLength 128
      */
-  preflightToken: string;
+  preflightHandle: string;
   confirmedNoSensitiveData: true;
 }

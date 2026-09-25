@@ -141,6 +141,20 @@
       "when": 1790180000000,
       "tag": "0019_semantic_denials_and_preflight_guard_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790181000000,
+      "tag": "0020_semantic_analysis_dispatch_token_kinds",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790182000000,
+      "tag": "0021_semantic_denial_dispatch_category",
+      "breakpoints": true
     }
   ]
 }
