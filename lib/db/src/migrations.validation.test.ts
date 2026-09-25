@@ -26,6 +26,10 @@ const migrationNames = [
   "0012_semantic_provider_configs.sql",
   "0013_semantic_analysis_proposals.sql",
   "0014_semantic_proposal_credential_binding.sql",
+  "0015_semantic_analysis_preflight_and_source_hash.sql",
+  "0016_preflight_live_workspace_guards.sql",
+  "0017_preflight_reject_deleted_workspace_writes.sql",
+  "0018_short_preflight_workspace_write_guard.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -101,7 +105,7 @@ async function expectConnectorSafeguards(client: pg.PoolClient, validated: boole
   }]);
 }
 
-async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 10) {
+async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 10, checkCount = 10) {
   const guards = await client.query<{ fks: number; checks: number }>(`
     SELECT
       (SELECT count(*)::int FROM pg_constraint
@@ -111,7 +115,8 @@ async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 10) 
            'api_spec_versions_workspace_live_fk', 'api_operations_workspace_live_fk',
            'operation_policies_workspace_live_fk', 'credential_metadata_workspace_live_fk',
            'connector_actors_workspace_live_fk', 'connector_tokens_workspace_live_fk',
-            'execution_leases_workspace_live_fk', 'semantic_provider_configs_workspace_live_fk'
+             'execution_leases_workspace_live_fk', 'semantic_provider_configs_workspace_live_fk',
+             'semantic_analysis_proposals_workspace_live_fk', 'semantic_analysis_preflight_tokens_workspace_live_fk'
          ]) AND convalidated) AS fks,
       (SELECT count(*)::int FROM pg_constraint
        WHERE connamespace = current_schema()::regnamespace AND contype = 'c'
@@ -120,11 +125,12 @@ async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 10) 
            'api_spec_versions_live_check', 'api_operations_live_check',
            'operation_policies_live_check', 'credential_metadata_live_check',
            'connector_actors_live_check', 'connector_tokens_live_check',
-            'execution_leases_live_check', 'semantic_provider_configs_live_check'
+             'execution_leases_live_check', 'semantic_provider_configs_live_check',
+             'semantic_analysis_proposals_live_check', 'semantic_analysis_preflight_tokens_live_check'
          ])) AS checks
   `);
   expect(guards.rows[0]?.fks).toBe(validated);
-  expect(guards.rows[0]?.checks).toBe(10);
+   expect(guards.rows[0]?.checks).toBe(checkCount);
   const parent = await client.query<{ count: number }>(`
     SELECT count(*)::int AS count FROM pg_constraint
     WHERE connamespace = current_schema()::regnamespace
@@ -295,7 +301,7 @@ describe("migration reconciliation", () => {
         await client.query(`SET search_path TO "${schema}", public`);
         await applyMigrations(client, schema);
         await expectConnectorSafeguards(client, true);
-        await expectWorkspaceLiveGuards(client);
+        await expectWorkspaceLiveGuards(client, 12, 12);
         const deletedWorkspaceTriggers = await client.query<{ count: number }>(`
           SELECT count(*)::int AS count
           FROM pg_trigger
@@ -306,13 +312,37 @@ describe("migration reconciliation", () => {
               WHERE relnamespace = current_schema()::regnamespace
             )
         `);
-        expect(deletedWorkspaceTriggers.rows[0]?.count).toBe(9);
+        expect(deletedWorkspaceTriggers.rows[0]?.count).toBe(10);
         await client.query(
           "INSERT INTO workspaces (id, name, deleted_at, is_live) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now(), false)",
         );
         await expect(client.query(
           "INSERT INTO workspace_memberships (workspace_id, user_id, role) VALUES ('f0000000-0000-4000-8000-000000000001', 'fixture-user', 'MEMBER')",
         )).rejects.toThrow();
+        await expect(client.query(`
+          INSERT INTO semantic_analysis_preflight_tokens
+            (token_hash, actor_id, workspace_id, workspace_is_live, api_id, operation_id,
+             specification_id, document_hash, credential_id, credential_revision,
+             payload_digest, expires_at)
+          VALUES ('fixture-token-hash', 'fixture-user', 'f0000000-0000-4000-8000-000000000001',
+                  true, 'f0000000-0000-4000-8000-000000000002',
+                  'f0000000-0000-4000-8000-000000000003',
+                  'f0000000-0000-4000-8000-000000000004',
+                  'fixture-document-hash', 'f0000000-0000-4000-8000-000000000005',
+                  1, 'fixture-payload-digest', now() + interval '1 minute')
+        `)).rejects.toThrow();
+        await expect(client.query(`
+          INSERT INTO semantic_analysis_preflight_tokens
+            (token_hash, actor_id, workspace_id, workspace_is_live, api_id, operation_id,
+             specification_id, document_hash, credential_id, credential_revision,
+             payload_digest, expires_at)
+          VALUES ('fixture-false-live-hash', 'fixture-user', 'f0000000-0000-4000-8000-000000000001',
+                  false, 'f0000000-0000-4000-8000-000000000002',
+                  'f0000000-0000-4000-8000-000000000003',
+                  'f0000000-0000-4000-8000-000000000004',
+                  'fixture-document-hash', 'f0000000-0000-4000-8000-000000000005',
+                  1, 'fixture-payload-digest', now() + interval '1 minute')
+        `)).rejects.toThrow();
         const tenantKeys = await client.query<{ count: number }>(`
           SELECT count(*)::int AS count FROM pg_constraint
           WHERE connamespace = current_schema()::regnamespace
@@ -335,7 +365,7 @@ describe("migration reconciliation", () => {
         await applyMigrations(client, schema, 7, 8);
         await applyMigrations(client, schema, 8, 13);
         await expectConnectorSafeguards(client, true);
-        await expectWorkspaceLiveGuards(client);
+        await expectWorkspaceLiveGuards(client, 12, 12);
         const after = await client.query(
           "SELECT count(*)::int AS count FROM pg_class WHERE relnamespace = current_schema()::regnamespace",
         );

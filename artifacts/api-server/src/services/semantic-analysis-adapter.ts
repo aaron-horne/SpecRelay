@@ -3,8 +3,8 @@ export interface JevOperationInput {
   path: string;
   summary: string | null;
   description: string | null;
-  parameters: Array<{ location: string; required: boolean; description: string }>;
-  responses: Array<{ status: string; description: string }>;
+  parameters: Array<{ location: string; required: boolean; schemaType?: string; description?: string }>;
+  responses: Array<{ status: string; description?: string }>;
 }
 
 export interface JevCandidate {
@@ -23,6 +23,27 @@ export interface SemanticAnalysisAdapter {
     operation: JevOperationInput,
     candidates: JevCandidate[],
   ): Promise<{ judgment: Promise<JevAnalysisJudgment> }>;
+}
+
+export function serializeJevRequest(operation: JevOperationInput, candidates: JevCandidate[]) {
+  const criteria: Record<string, string> = Object.fromEntries(
+    candidates.map((candidate) => [candidate.id, candidate.text]),
+  );
+  criteria.abstain = "No candidate is sufficiently supported or suitable.";
+  return {
+    model: "jev-latest",
+    state: { operation, candidates: candidates.map(({ id, text }) => ({ id, text })) },
+    questions: {
+      description_candidate: {
+        type: "choice",
+        instructions: {
+          question: "Select which exact candidate text is the best concise human-readable description of this imported operation. Do not rewrite, infer missing facts, or create new text.",
+          abstention: "Choose abstain when no candidate is clearly suitable or source-supported.",
+        },
+        criteria,
+      },
+    },
+  };
 }
 
 const JEV_URL = "https://api.typesafe.ai/v1/systemone";
@@ -94,24 +115,7 @@ export class JevSemanticAnalysisAdapter implements SemanticAnalysisAdapter {
     if (candidates.length === 0 || candidates.length > 8) {
       throw new Error("No bounded description candidates");
     }
-    const criteria: Record<string, string> = Object.fromEntries(
-      candidates.map((candidate) => [candidate.id, candidate.text]),
-    );
-    criteria.abstain = "No candidate is sufficiently supported or suitable.";
-    const body = JSON.stringify({
-      model: "jev-latest",
-      state: { operation, candidates: candidates.map(({ id, text }) => ({ id, text })) },
-      questions: {
-        description_candidate: {
-          type: "choice",
-          instructions: {
-            question: "Select which exact candidate text is the best concise human-readable description of this imported operation. Do not rewrite, infer missing facts, or create new text.",
-            abstention: "Choose abstain when no candidate is clearly suitable or source-supported.",
-          },
-          criteria,
-        },
-      },
-    });
+    const body = JSON.stringify(serializeJevRequest(operation, candidates));
     if (Buffer.byteLength(body, "utf8") > MAX_REQUEST_BYTES) {
       throw new Error("Bounded analysis request exceeded its maximum size");
     }
@@ -134,14 +138,6 @@ export class JevSemanticAnalysisAdapter implements SemanticAnalysisAdapter {
       throw new Error("Jev request failed");
     }
     return { judgment: this.classify(response, candidates) };
-  }
-
-  async analyze(
-    secret: string,
-    operation: JevOperationInput,
-    candidates: JevCandidate[],
-  ): Promise<JevAnalysisJudgment> {
-    return (await this.dispatch(secret, operation, candidates)).judgment;
   }
 
   private async classify(response: Response, candidates: JevCandidate[]): Promise<JevAnalysisJudgment> {

@@ -40,6 +40,8 @@ import type {
   NotFoundResponse,
   OperationStateUpdate,
   RevokeConnector200,
+  SemanticAnalysisConfirmation,
+  SemanticAnalysisPreflightResponse,
   SemanticAnalysisProposal,
   SemanticAnalysisResult,
   SemanticProposalDecision,
@@ -2046,6 +2048,85 @@ export const useTestSemanticProvider = <TError = ErrorType<ErrorResponse | NotFo
       return useMutation(getTestSemanticProviderMutationOptions(options));
     }
 
+export const getPrepareSemanticAnalysisUrl = (workspaceId: string,
+    apiId: string,
+    operationId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/operations/${operationId}/semantic-analysis/preflight`
+}
+
+/**
+ * Returns a short-lived, single-use confirmation token and the exact outbound payload. Preparation does not call Jev.
+ * @summary Prepare the exact payload for one-operation Jev analysis
+ */
+export const prepareSemanticAnalysis = async (workspaceId: string,
+    apiId: string,
+    operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisPreflightResponse> => {
+
+  return customFetch<SemanticAnalysisPreflightResponse>(getPrepareSemanticAnalysisUrl(workspaceId,apiId,operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPrepareSemanticAnalysisMutationKey = () => ['prepareSemanticAnalysis'] as const;
+
+export const getPrepareSemanticAnalysisMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof prepareSemanticAnalysis>>, TError,PrepareSemanticAnalysisMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof prepareSemanticAnalysis>>, TError,PrepareSemanticAnalysisMutationVariables, TContext> => {
+
+const mutationKey = getPrepareSemanticAnalysisMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof prepareSemanticAnalysis>>, PrepareSemanticAnalysisMutationVariables> = (props) => {
+          const {workspaceId,apiId,operationId} = props ?? {};
+
+          return  prepareSemanticAnalysis(workspaceId,apiId,operationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PrepareSemanticAnalysisMutationResult = NonNullable<Awaited<ReturnType<typeof prepareSemanticAnalysis>>>
+
+    export type PrepareSemanticAnalysisMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type PrepareSemanticAnalysisMutationVariables = {workspaceId: string;apiId: string;operationId: string}
+
+    /**
+ * @summary Prepare the exact payload for one-operation Jev analysis
+ */
+export const usePrepareSemanticAnalysis = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof prepareSemanticAnalysis>>, TError,PrepareSemanticAnalysisMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof prepareSemanticAnalysis>>,
+        TError,
+        PrepareSemanticAnalysisMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPrepareSemanticAnalysisMutationOptions(options));
+    }
+
 export const getAnalyzeApiOperationUrl = (workspaceId: string,
     apiId: string,
     operationId: string,) => {
@@ -2057,19 +2138,34 @@ export const getAnalyzeApiOperationUrl = (workspaceId: string,
 }
 
 /**
- * OWNER-only, same-origin, explicit one-operation analysis. Sends only a bounded, redacted operation description to Jev. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the imported operation.
+ * OWNER-only, same-origin, explicit confirmation using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
  * @summary Manually analyze one imported operation with Jev
  */
 export const analyzeApiOperation = async (workspaceId: string,
     apiId: string,
-    operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisResult> => {
+    operationId: string,
+    semanticAnalysisConfirmation: SemanticAnalysisConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisResult> => {
 
-  return customFetch<SemanticAnalysisResult>(getAnalyzeApiOperationUrl(workspaceId,apiId,operationId),
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticAnalysisResult>(getAnalyzeApiOperationUrl(workspaceId,apiId,operationId),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticAnalysisConfirmation)
   }
 );}
 
@@ -2094,9 +2190,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeApiOperation>>, AnalyzeApiOperationMutationVariables> = (props) => {
-          const {workspaceId,apiId,operationId} = props ?? {};
+          const {workspaceId,apiId,operationId,data} = props ?? {};
 
-          return  analyzeApiOperation(workspaceId,apiId,operationId,requestOptions)
+          return  analyzeApiOperation(workspaceId,apiId,operationId,data,requestOptions)
         }
 
 
@@ -2107,9 +2203,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type AnalyzeApiOperationMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeApiOperation>>>
-
+    export type AnalyzeApiOperationMutationBody = BodyType<SemanticAnalysisConfirmation>
     export type AnalyzeApiOperationMutationError = ErrorType<ErrorResponse | NotFoundResponse>
-    export type AnalyzeApiOperationMutationVariables = {workspaceId: string;apiId: string;operationId: string}
+    export type AnalyzeApiOperationMutationVariables = {workspaceId: string;apiId: string;operationId: string;data: BodyType<SemanticAnalysisConfirmation>}
 
     /**
  * @summary Manually analyze one imported operation with Jev

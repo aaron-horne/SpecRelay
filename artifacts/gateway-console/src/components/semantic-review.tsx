@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   getGetSemanticProviderQueryKey,
   getListSemanticProposalsQueryKey,
   useAnalyzeApiOperation,
+  usePrepareSemanticAnalysis,
   useDecideSemanticProposal,
   useGetSemanticProvider,
   useListSemanticProposals,
@@ -42,10 +43,30 @@ function dateLabel(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
-function sourceText(operation: ApiOperation, field: string) {
-  if (field === "summary" || field.endsWith(".summary")) return operation.summary
-  if (field === "description" || field.endsWith(".description")) return operation.description
+function sourceText(operation: ApiOperation, field: string): string | null {
+  if (field === "summary") return operation.summary
+  if (field === "description") return operation.description
+  const match = /^(parameter_description|response_description):([0-9]+)$/.exec(field)
+  if (match) {
+    const index = Number(match[2])
+    if (!Number.isSafeInteger(index)) return null
+    return match[1] === "parameter_description"
+      ? operation.parameters[index]?.description ?? null
+      : operation.responses[index]?.description ?? null
+  }
   return null
+}
+
+function sourceContext(operation: ApiOperation, field: string): string | null {
+  const match = /^(parameter_description|response_description):([0-9]+)$/.exec(field)
+  if (!match) return null
+  const index = Number(match[2])
+  if (match[1] === "parameter_description") {
+    const parameter = operation.parameters[index]
+    return parameter ? `Parameter ${index} · ${parameter.location} · ${parameter.name}` : null
+  }
+  const response = operation.responses[index]
+  return response ? `Response ${index} · status ${response.statusCode}` : null
 }
 
 const statusStyle: Record<SemanticAnalysisProposal["status"], string> = {
@@ -61,16 +82,25 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
   const [result, setResult] = useState<SemanticAnalysisResult | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [preflight, setPreflight] = useState<{ preflightToken: string; expiresAt: string; payload: object; operationId: string; specificationId: string } | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [actionError, setActionError] = useState<string | null>(null)
-  const [failedAction, setFailedAction] = useState<"analyze" | "decision" | null>(null)
+  const [failedAction, setFailedAction] = useState<"preflight" | "analyze" | "decision" | null>(null)
   const providerQuery = useGetSemanticProvider(workspaceId, {
     query: { enabled: canManage, queryKey: getGetSemanticProviderQueryKey(workspaceId) }
   })
   const proposalsQuery = useListSemanticProposals(workspaceId, apiId, operation.id, {
     query: { enabled: canManage, queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, operation.id) }
   })
+  const prepare = usePrepareSemanticAnalysis()
   const analyze = useAnalyzeApiOperation()
   const decide = useDecideSemanticProposal()
+
+  useEffect(() => {
+    if (!preflight) return
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [preflight])
 
   const proposals = [...(proposalsQuery.data || [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const current = proposals.filter((item) =>
@@ -84,6 +114,11 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
   const ready = Boolean(providerQuery.data?.enabled && providerQuery.data?.rolloutEnabled && providerQuery.data?.credentialUsable)
   const canDecide = canManage && selected?.status === "pending" &&
     selected.specificationId === operation.specificationId && selected.operationId === operation.id
+  const selectedSource = selected && selected.specificationId === operation.specificationId && selected.operationId === operation.id
+    ? sourceText(operation, selected.sourceField) : null
+  const sourceUnusable = canDecide && selectedSource === null
+  const preflightExpired = !preflight || !Number.isFinite(Date.parse(preflight.expiresAt)) || now >= Date.parse(preflight.expiresAt)
+  const preflightMatchesOperation = preflight?.operationId === operation.id && preflight?.specificationId === operation.specificationId
 
   function refresh() {
     return queryClient.invalidateQueries({
@@ -91,12 +126,30 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
     })
   }
 
-  function handleAnalyze() {
-    if (!canManage || !ready || analyze.isPending) return
+  function handlePrepare() {
+    if (!canManage || !ready || prepare.isPending || analyze.isPending || preflight) return
     setActionError(null)
     setFailedAction(null)
     setResult(null)
-    analyze.mutate({ workspaceId, apiId, operationId: operation.id }, {
+    prepare.mutate({ workspaceId, apiId, operationId: operation.id }, {
+      onSuccess: (response) => {
+        setNow(Date.now())
+        setPreflight({ ...response, operationId: operation.id, specificationId: operation.specificationId })
+      },
+      onError: (error) => {
+        setFailedAction("preflight")
+        setActionError(errorMessage(error, "The review payload could not be prepared. No analysis was sent."))
+      }
+    })
+  }
+
+  function handleAnalyze() {
+    if (!canManage || !ready || !preflight || preflightExpired || !preflightMatchesOperation || analyze.isPending) return
+    const token = preflight.preflightToken
+    setPreflight(null)
+    setActionError(null)
+    setFailedAction(null)
+    analyze.mutate({ workspaceId, apiId, operationId: operation.id, data: { preflightToken: token } }, {
       onSuccess: (response) => {
         setResult(response)
         if (response.proposal) setSelectedId(response.proposal.id)
@@ -110,13 +163,19 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
       },
       onError: (error) => {
         setFailedAction("analyze")
-        setActionError(errorMessage(error, "Analysis could not be completed."))
+        setActionError(`${errorMessage(error, "Analysis could not be completed.")} No automatic retry was made. Prepare a new review payload to try again.`)
       }
     })
   }
 
   function handleDecision(proposal: SemanticAnalysisProposal, decision: "accepted" | "rejected") {
-    if (!canManage || proposal.status !== "pending" || proposal.specificationId !== operation.specificationId || decide.isPending) return
+    if (!canManage || proposal.status !== "pending" || proposal.specificationId !== operation.specificationId || proposal.operationId !== operation.id || decide.isPending) return
+    if (decision === "accepted" && sourceText(operation, proposal.sourceField) === null) {
+      setConfirmId(null)
+      setFailedAction("decision")
+      setActionError("This proposal's original source cannot be resolved. Acceptance is unavailable; refresh proposals.")
+      return
+    }
     setActionError(null)
     setFailedAction(null)
     decide.mutate({ workspaceId, apiId, proposalId: proposal.id, data: { decision } }, {
@@ -160,9 +219,9 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
                 <Badge variant="outline" className={ready ? "border-emerald-500/40 text-emerald-300" : "text-muted-foreground"} data-testid="status-semantic-provider">
                   {providerQuery.isLoading ? "Checking provider" : providerQuery.isError ? "Provider status unavailable" : ready ? "Provider Ready" : "Provider not Ready"}
                 </Badge>
-                <Button onClick={handleAnalyze} disabled={!ready || providerQuery.isLoading || providerQuery.isError || analyze.isPending} data-testid="button-analyze-operation">
+                <Button onClick={handlePrepare} disabled={!ready || providerQuery.isLoading || providerQuery.isError || prepare.isPending || analyze.isPending || Boolean(preflight)} data-testid="button-analyze-operation">
                   <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {analyze.isPending ? "Analyzing operation..." : "Analyze this operation"}
+                  {prepare.isPending ? "Preparing review..." : analyze.isPending ? "Analyzing operation..." : "Review analysis payload"}
                 </Button>
                 {!ready && !providerQuery.isLoading && !providerQuery.isError && (
                   <span className="max-w-60 text-xs text-muted-foreground md:text-right">Configure, test, and mark the provider Ready in workspace settings first.</span>
@@ -207,11 +266,11 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
             </div>
           </div>
 
-          {analyze.isPending && <div className="space-y-2" aria-label="Analysis in progress"><Skeleton className="h-4 w-44" /><Skeleton className="h-16 w-full" /></div>}
+          {(prepare.isPending || analyze.isPending) && <div className="space-y-2" aria-label={prepare.isPending ? "Preparing review payload" : "Analysis in progress"}><Skeleton className="h-4 w-44" /><Skeleton className="h-16 w-full" /></div>}
           {actionError && (
             <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" data-testid="status-semantic-action-error">
               <span>{actionError}</span>
-              {failedAction === "analyze" && ready && canManage && <Button size="sm" variant="outline" onClick={handleAnalyze} disabled={analyze.isPending} data-testid="button-retry-semantic-analysis">Retry analysis</Button>}
+              {(failedAction === "preflight" || failedAction === "analyze") && ready && canManage && <Button size="sm" variant="outline" onClick={handlePrepare} disabled={prepare.isPending || analyze.isPending} data-testid="button-retry-semantic-analysis">Prepare a new review</Button>}
               {failedAction === "decision" && <Button size="sm" variant="outline" onClick={() => void proposalsQuery.refetch()} data-testid="button-refresh-semantic-decision">Refresh proposals</Button>}
             </div>
           )}
@@ -273,11 +332,19 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
                       <div className="space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Selected source field</p>
                         <code className="inline-block rounded border border-border bg-background px-2 py-1 text-xs text-primary" data-testid="text-proposal-source-field">{selected.sourceField}</code>
+                         {selected.specificationId === operation.specificationId && sourceContext(operation, selected.sourceField) && (
+                           <p className="text-xs text-muted-foreground" data-testid="text-proposal-source-context">{sourceContext(operation, selected.sourceField)}</p>
+                         )}
                         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground" data-testid="text-proposal-source-value">
-                          {selected.specificationId !== operation.specificationId
+                           {selected.specificationId !== operation.specificationId || selected.operationId !== operation.id
                             ? "This belongs to an earlier specification. Its original source text is not available in the current operation."
-                            : sourceText(operation, selected.sourceField) || "No source text is available for this field in the current operation."}
+                             : selectedSource === null ? "Original source field cannot be resolved in this operation." : selectedSource || "(Empty in the imported specification)"}
                         </p>
+                         {sourceUnusable && (
+                           <p role="alert" className="text-xs text-amber-200" data-testid="status-proposal-source-unusable">
+                             Unusable / stale source reference. Acceptance is disabled until the proposal is refreshed.
+                           </p>
+                         )}
                       </div>
                       <div className="space-y-2 border-t border-border pt-5 md:border-l md:border-t-0 md:pl-5 md:pt-0">
                         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Proposed description</p>
@@ -295,12 +362,13 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
                           <Button variant="outline" onClick={() => handleDecision(selected, "rejected")} disabled={decide.isPending} data-testid={`button-reject-proposal-${selected.id}`}>
                             <X className="mr-2 h-4 w-4" aria-hidden="true" /> Reject
                           </Button>
-                          <Button onClick={() => setConfirmId(selected.id)} disabled={decide.isPending} data-testid={`button-accept-proposal-${selected.id}`}>
+                           <Button onClick={() => setConfirmId(selected.id)} disabled={decide.isPending || sourceUnusable} data-testid={`button-accept-proposal-${selected.id}`}>
                             <Check className="mr-2 h-4 w-4" aria-hidden="true" /> Accept for console
                           </Button>
                         </div>
                       )}
                       {selected.status === "stale" && <p className="text-xs text-muted-foreground">Stale proposals cannot be decided. Request a new analysis for the current specification.</p>}
+                       {sourceUnusable && <Button size="sm" variant="outline" onClick={() => void proposalsQuery.refetch()} disabled={proposalsQuery.isFetching} data-testid="button-refresh-stale-proposal"><RefreshCw className="mr-2 h-3 w-3" aria-hidden="true" /> Refresh proposals</Button>}
                       {selected.specificationId !== operation.specificationId && selected.status !== "stale" && <p className="text-xs text-muted-foreground">Earlier specification: view-only.</p>}
                       {!canManage && selected.status === "pending" && <p className="text-xs text-muted-foreground">Only a workspace owner can decide this proposal.</p>}
                     </div>
@@ -311,6 +379,41 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
           </div>
         </CardContent>
       </Card>
+       <Dialog open={Boolean(preflight)} onOpenChange={(open) => { if (!open && !analyze.isPending) setPreflight(null) }}>
+         <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden" data-testid="dialog-semantic-preflight">
+           <DialogHeader>
+             <DialogTitle>Review what will be sent to Jev</DialogTitle>
+             <DialogDescription>
+               This is the exact JSON request body prepared by the server, including all documentation fields, static questions, and criteria. Inspect it before sending. No secrets or authorization header are displayed here.
+             </DialogDescription>
+           </DialogHeader>
+           {preflight && (
+             <>
+               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                 <span data-testid="text-preflight-expiry">Confirmation expires {dateLabel(preflight.expiresAt)}</span>
+                 {preflightExpired || !preflightMatchesOperation ? (
+                   <Badge variant="outline" className="border-amber-500/40 text-amber-200" data-testid="status-preflight-expired">Expired or operation changed — prepare again</Badge>
+                 ) : (
+                   <Badge variant="outline" className="border-primary/40 text-primary" data-testid="status-preflight-ready">Awaiting your confirmation</Badge>
+                 )}
+               </div>
+               <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background/50 p-4" aria-label="Exact JSON body sent to Jev">
+                 <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed" data-testid="text-semantic-preflight-payload">{JSON.stringify(preflight.payload, null, 2)}</pre>
+               </div>
+             </>
+           )}
+           <DialogFooter className="gap-2">
+             <Button variant="outline" onClick={() => setPreflight(null)} data-testid="button-cancel-semantic-preflight">Cancel</Button>
+             {preflightExpired || !preflightMatchesOperation ? (
+               <Button onClick={() => setPreflight(null)} data-testid="button-discard-expired-preflight">Discard and prepare again</Button>
+             ) : (
+               <Button onClick={handleAnalyze} disabled={!ready || !canManage || analyze.isPending} data-testid="button-confirm-send-semantic-analysis">
+                 Confirm and send to Jev
+               </Button>
+             )}
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
       <Dialog open={Boolean(confirmId)} onOpenChange={(open) => { if (!open) setConfirmId(null) }}>
         <DialogContent>
           <DialogHeader>
@@ -321,7 +424,7 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmId(null)} data-testid="button-cancel-accept-proposal">Cancel</Button>
-            <Button onClick={() => { const item = proposals.find((proposal) => proposal.id === confirmId); if (item) handleDecision(item, "accepted") }} disabled={decide.isPending} data-testid="button-confirm-accept-proposal">
+             <Button onClick={() => { const item = proposals.find((proposal) => proposal.id === confirmId); if (item) handleDecision(item, "accepted") }} disabled={decide.isPending || !proposals.some((proposal) => proposal.id === confirmId && proposal.status === "pending" && proposal.specificationId === operation.specificationId && proposal.operationId === operation.id && sourceText(operation, proposal.sourceField) !== null)} data-testid="button-confirm-accept-proposal">
               {decide.isPending ? "Saving decision..." : "Accept for console"}
             </Button>
           </DialogFooter>

@@ -34,6 +34,7 @@ export const semanticAnalysisProposalsTable = pgTable(
     workspaceIsLive: boolean("workspace_is_live").notNull().default(true),
     apiId: uuid("api_id").notNull(),
     specificationId: uuid("specification_id").notNull(),
+    sourceDocumentHash: text("source_document_hash").notNull(),
     operationId: uuid("operation_id").notNull(),
     providerConfigId: uuid("provider_config_id"),
     credentialRevision: integer("credential_revision"),

@@ -786,13 +786,44 @@ export const TestSemanticProviderResponse = zod.object({
 
 
 /**
- * OWNER-only, same-origin, explicit one-operation analysis. Sends only a bounded, redacted operation description to Jev. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the imported operation.
+ * Returns a short-lived, single-use confirmation token and the exact outbound payload. Preparation does not call Jev.
+ * @summary Prepare the exact payload for one-operation Jev analysis
+ */
+export const PrepareSemanticAnalysisParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const prepareSemanticAnalysisResponsePreflightTokenMin = 32;
+export const prepareSemanticAnalysisResponsePreflightTokenMax = 128;
+
+
+
+export const PrepareSemanticAnalysisResponse = zod.object({
+  "preflightToken": zod.string().min(prepareSemanticAnalysisResponsePreflightTokenMin).max(prepareSemanticAnalysisResponsePreflightTokenMax),
+  "expiresAt": zod.coerce.date(),
+  "payload": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * OWNER-only, same-origin, explicit confirmation using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
  * @summary Manually analyze one imported operation with Jev
  */
 export const AnalyzeApiOperationParams = zod.object({
   "workspaceId": zod.coerce.string().uuid(),
   "apiId": zod.coerce.string().uuid(),
   "operationId": zod.coerce.string().uuid()
+})
+
+export const analyzeApiOperationBodyPreflightTokenMin = 32;
+export const analyzeApiOperationBodyPreflightTokenMax = 128;
+
+
+
+export const AnalyzeApiOperationBody = zod.object({
+  "preflightToken": zod.string().min(analyzeApiOperationBodyPreflightTokenMin).max(analyzeApiOperationBodyPreflightTokenMax)
 })
 
 export const analyzeApiOperationResponseConfidenceMin = 0;

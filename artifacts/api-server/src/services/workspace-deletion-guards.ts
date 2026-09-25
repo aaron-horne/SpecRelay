@@ -23,6 +23,7 @@ const liveChildren = [
   "execution_leases",
   "semantic_provider_configs",
   "semantic_analysis_proposals",
+  "semantic_analysis_preflight_tokens",
 ] as const;
 
 const olderTenantKeys: ForeignKeySpec[] = [
