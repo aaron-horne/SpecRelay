@@ -26,13 +26,19 @@ export function resolveActorId(
   return auth.userId ?? undefined;
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export async function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  onUnauthenticated: (() => Promise<void>) | undefined = undefined,
+): Promise<void> {
   if (actors.has(req) && req.path.endsWith("/mcp")) { next(); return; }
   const isTest = process.env.NODE_ENV === "test";
   const testHeader = isTest ? req.header("x-test-user-id") : undefined;
   const auth = isTest ? {} : getAuth(req);
   const actorId = resolveActorId(auth, testHeader, isTest);
   if (!actorId) {
+    if (onUnauthenticated) await onUnauthenticated();
     res.status(401).json({ error: "Unauthorized", code: "UNAUTHENTICATED" });
     return;
   }
@@ -111,6 +117,7 @@ export async function requireWorkspaceMembership(
   req: Request,
   res: Response,
   next: NextFunction,
+  onWorkspaceUnavailable: (() => Promise<void>) | undefined = undefined,
 ): Promise<void> {
   const workspaceId = String(req.params.workspaceId);
   const userId = actorId(req);
@@ -127,6 +134,7 @@ export async function requireWorkspaceMembership(
     )
     .limit(1);
   if (!membership) {
+    if (onWorkspaceUnavailable) await onWorkspaceUnavailable();
     res.status(404).json({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
     return;
   }
@@ -137,6 +145,7 @@ export async function requireWorkspaceOwner(
   req: Request,
   res: Response,
   next: NextFunction,
+  onWorkspaceUnavailable: (() => Promise<void>) | undefined = undefined,
 ): Promise<void> {
   const workspaceId = String(req.params.workspaceId);
   const userId = actorId(req);
@@ -153,6 +162,7 @@ export async function requireWorkspaceOwner(
     )
     .limit(1);
   if (!membership) {
+    if (onWorkspaceUnavailable) await onWorkspaceUnavailable();
     res.status(404).json({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
     return;
   }

@@ -83,6 +83,7 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [preflight, setPreflight] = useState<{ preflightToken: string; expiresAt: string; payload: object; operationId: string; specificationId: string } | null>(null)
+  const [confirmedNoSensitiveData, setConfirmedNoSensitiveData] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const [actionError, setActionError] = useState<string | null>(null)
   const [failedAction, setFailedAction] = useState<"preflight" | "analyze" | "decision" | null>(null)
@@ -102,6 +103,11 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
     return () => window.clearInterval(interval)
   }, [preflight])
 
+  useEffect(() => {
+    setPreflight(null)
+    setConfirmedNoSensitiveData(false)
+  }, [operation.id, operation.specificationId])
+
   const proposals = [...(proposalsQuery.data || [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const current = proposals.filter((item) =>
     item.specificationId === operation.specificationId && item.operationId === operation.id
@@ -120,6 +126,15 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
   const preflightExpired = !preflight || !Number.isFinite(Date.parse(preflight.expiresAt)) || now >= Date.parse(preflight.expiresAt)
   const preflightMatchesOperation = preflight?.operationId === operation.id && preflight?.specificationId === operation.specificationId
 
+  useEffect(() => {
+    if (preflight && preflightExpired) setConfirmedNoSensitiveData(false)
+  }, [preflight, preflightExpired])
+
+  function discardPreflight() {
+    setPreflight(null)
+    setConfirmedNoSensitiveData(false)
+  }
+
   function refresh() {
     return queryClient.invalidateQueries({
       queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, operation.id)
@@ -131,9 +146,11 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
     setActionError(null)
     setFailedAction(null)
     setResult(null)
+    setConfirmedNoSensitiveData(false)
     prepare.mutate({ workspaceId, apiId, operationId: operation.id }, {
       onSuccess: (response) => {
         setNow(Date.now())
+        setConfirmedNoSensitiveData(false)
         setPreflight({ ...response, operationId: operation.id, specificationId: operation.specificationId })
       },
       onError: (error) => {
@@ -144,12 +161,13 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
   }
 
   function handleAnalyze() {
-    if (!canManage || !ready || !preflight || preflightExpired || !preflightMatchesOperation || analyze.isPending) return
+    if (!canManage || !ready || !preflight || !confirmedNoSensitiveData || preflightExpired || !preflightMatchesOperation || analyze.isPending) return
     const token = preflight.preflightToken
-    setPreflight(null)
+    discardPreflight()
     setActionError(null)
     setFailedAction(null)
-    analyze.mutate({ workspaceId, apiId, operationId: operation.id, data: { preflightToken: token } }, {
+    const confirmation = { preflightToken: token, confirmedNoSensitiveData: true as const }
+    analyze.mutate({ workspaceId, apiId, operationId: operation.id, data: confirmation }, {
       onSuccess: (response) => {
         setResult(response)
         if (response.proposal) setSelectedId(response.proposal.id)
@@ -379,7 +397,7 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
           </div>
         </CardContent>
       </Card>
-       <Dialog open={Boolean(preflight)} onOpenChange={(open) => { if (!open && !analyze.isPending) setPreflight(null) }}>
+        <Dialog open={Boolean(preflight)} onOpenChange={(open) => { if (!open && !analyze.isPending) discardPreflight() }}>
          <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden" data-testid="dialog-semantic-preflight">
            <DialogHeader>
              <DialogTitle>Review what will be sent to Jev</DialogTitle>
@@ -400,14 +418,25 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
                <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background/50 p-4" aria-label="Exact JSON body sent to Jev">
                  <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed" data-testid="text-semantic-preflight-payload">{JSON.stringify(preflight.payload, null, 2)}</pre>
                </div>
+                <label className="flex items-start gap-3 rounded-md border border-border bg-muted/20 p-3 text-sm leading-relaxed">
+                  <input
+                    type="checkbox"
+                    checked={confirmedNoSensitiveData}
+                    onChange={(event) => setConfirmedNoSensitiveData(event.target.checked)}
+                    disabled={preflightExpired || !preflightMatchesOperation || analyze.isPending}
+                    className="mt-1 h-4 w-4 shrink-0 accent-primary"
+                    data-testid="checkbox-confirm-no-sensitive-data"
+                  />
+                  <span>I reviewed the exact JSON payload above and confirm it contains no sensitive, customer, or session data.</span>
+                </label>
              </>
            )}
            <DialogFooter className="gap-2">
-             <Button variant="outline" onClick={() => setPreflight(null)} data-testid="button-cancel-semantic-preflight">Cancel</Button>
+              <Button variant="outline" onClick={discardPreflight} data-testid="button-cancel-semantic-preflight">Cancel</Button>
              {preflightExpired || !preflightMatchesOperation ? (
-               <Button onClick={() => setPreflight(null)} data-testid="button-discard-expired-preflight">Discard and prepare again</Button>
+                <Button onClick={discardPreflight} data-testid="button-discard-expired-preflight">Discard and prepare again</Button>
              ) : (
-               <Button onClick={handleAnalyze} disabled={!ready || !canManage || analyze.isPending} data-testid="button-confirm-send-semantic-analysis">
+                <Button onClick={handleAnalyze} disabled={!ready || !canManage || !confirmedNoSensitiveData || analyze.isPending} data-testid="button-confirm-send-semantic-analysis">
                  Confirm and send to Jev
                </Button>
              )}

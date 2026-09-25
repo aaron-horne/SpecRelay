@@ -30,6 +30,7 @@ const migrationNames = [
   "0016_preflight_live_workspace_guards.sql",
   "0017_preflight_reject_deleted_workspace_writes.sql",
   "0018_short_preflight_workspace_write_guard.sql",
+  "0019_semantic_denials_and_preflight_guard_cleanup.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -143,7 +144,11 @@ describe("migration reconciliation", () => {
   it("contains no destructive migration operations", async () => {
     for (const name of migrationNames) {
       const migration = await readFile(path.join(migrationsDirectory, name), "utf8");
-      expect(migration).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE)\b/im);
+      const permittedGuardCleanup = migration.replace(
+        /DROP TRIGGER IF EXISTS "semantic_analysis_preflight_tokens_reject_deleted_workspace_write"\s+ON "semantic_analysis_preflight_tokens";/g,
+        "",
+      );
+      expect(permittedGuardCleanup).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE)\b/im);
     }
     const hardeningMigration = await readFile(
       path.join(migrationsDirectory, "0005_spooky_inhumans.sql"),
@@ -313,6 +318,36 @@ describe("migration reconciliation", () => {
             )
         `);
         expect(deletedWorkspaceTriggers.rows[0]?.count).toBe(10);
+        const preflightGuard = await client.query<{ tgname: string }>(`
+          SELECT tgname FROM pg_trigger
+          WHERE tgrelid = 'semantic_analysis_preflight_tokens'::regclass AND NOT tgisinternal
+          ORDER BY tgname
+        `);
+        expect(preflightGuard.rows).toEqual([
+          { tgname: "semantic_preflight_tokens_reject_deleted_workspace_write" },
+        ]);
+        const denialAuditConstraints = await client.query<{ count: number }>(`
+          SELECT count(*)::int AS count FROM pg_constraint
+          WHERE conrelid = 'semantic_analysis_denial_events'::regclass AND contype = 'f'
+        `);
+        expect(denialAuditConstraints.rows[0]?.count).toBe(0);
+        const denialAuditColumns = await client.query<{ column_name: string }>(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_schema = current_schema() AND table_name = 'semantic_analysis_denial_events'
+          ORDER BY ordinal_position
+        `);
+        expect(denialAuditColumns.rows.map((row) => row.column_name)).toEqual([
+          "id", "actor_id", "request_category", "reason_class", "created_at",
+        ]);
+        await applyMigrations(client, schema, 19, 20);
+        const retainedGuard = await client.query<{ tgname: string }>(`
+          SELECT tgname FROM pg_trigger
+          WHERE tgrelid = 'semantic_analysis_preflight_tokens'::regclass AND NOT tgisinternal
+          ORDER BY tgname
+        `);
+        expect(retainedGuard.rows).toEqual([
+          { tgname: "semantic_preflight_tokens_reject_deleted_workspace_write" },
+        ]);
         await client.query(
           "INSERT INTO workspaces (id, name, deleted_at, is_live) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now(), false)",
         );

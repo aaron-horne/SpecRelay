@@ -134,6 +134,13 @@
       "when": 1790179000000,
       "tag": "0018_short_preflight_workspace_write_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790180000000,
+      "tag": "0019_semantic_denials_and_preflight_guard_cleanup",
+      "breakpoints": true
     }
   ]
 }

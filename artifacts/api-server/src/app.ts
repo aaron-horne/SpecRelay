@@ -13,6 +13,10 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import { securityServices } from "./services/security";
 import { shouldInstallClerkMiddleware } from "./middlewares/auth";
+import {
+  recordSemanticAnalysisDenial,
+  semanticAnalysisRequestCategory,
+} from "./services/semantic-analysis-denial-audit";
 
 const app: Express = express();
 app.locals.security = securityServices;
@@ -56,13 +60,20 @@ app.use((_req, res) => {
 });
 
 app.use(
-  (
+  async (
     error: unknown,
     req: express.Request,
     res: express.Response,
     _next: express.NextFunction,
-  ) => {
+  ): Promise<void> => {
     const isMcpRequest = req.path.endsWith("/mcp");
+    const semanticRequest = semanticAnalysisRequestCategory(req.method, req.path);
+    const status = typeof error === "object" && error !== null && "status" in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+    if (semanticRequest && (status === 400 || status === 413)) {
+      await recordSemanticAnalysisDenial(null, semanticRequest, "request_rejected");
+    }
     if (error instanceof OpenApiValidationError) {
       res.status(error.code === "DOCUMENT_TOO_LARGE" ? 413 : 400).json({
         error: error.message,

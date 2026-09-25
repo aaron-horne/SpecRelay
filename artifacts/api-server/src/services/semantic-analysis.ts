@@ -13,6 +13,7 @@ import {
   workspacesTable,
 } from "@workspace/db";
 import { decryptSemanticProviderSecret } from "./credential-crypto";
+import { recordSemanticAnalysisDenial } from "./semantic-analysis-denial-audit";
 import {
   JevSemanticAnalysisAdapter,
   serializeJevRequest,
@@ -247,6 +248,10 @@ export class SemanticAnalysisService {
     await auditDenied(workspaceId, apiId, operationId, actorId, reason, "semantic_analysis.request_denied");
   }
 
+  async recordConfirmationDenial(actorId: string) {
+    await recordSemanticAnalysisDenial(actorId, "confirmation", "payload_confirmation_required");
+  }
+
   async prepare(workspaceId: string, apiId: string, operationId: string, actorId: string) {
     try {
       return await db.transaction(async (tx) => {
@@ -287,7 +292,18 @@ export class SemanticAnalysisService {
     }
   }
 
-  async analyze(workspaceId: string, apiId: string, operationId: string, actorId: string, preflightToken: string) {
+  async analyze(
+    workspaceId: string,
+    apiId: string,
+    operationId: string,
+    actorId: string,
+    preflightToken: string,
+    confirmedNoSensitiveData: boolean,
+  ) {
+    if (confirmedNoSensitiveData !== true) {
+      await this.recordConfirmationDenial(actorId);
+      throw new ServiceError("Explicit confirmation that the reviewed payload contains no sensitive or customer data is required", 400, "SEMANTIC_ANALYSIS_CONFIRMATION_REQUIRED");
+    }
     const tokenHash = digest(preflightToken);
     const reservation = await db.transaction(async (tx) => {
       await acquireApiLock(tx, workspaceId, apiId);

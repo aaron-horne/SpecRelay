@@ -12,4 +12,5 @@ export interface SemanticAnalysisConfirmation {
      * @maxLength 128
      */
   preflightToken: string;
+  confirmedNoSensitiveData: true;
 }

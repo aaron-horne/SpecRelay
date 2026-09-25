@@ -808,7 +808,7 @@ export const PrepareSemanticAnalysisResponse = zod.object({
 
 
 /**
- * OWNER-only, same-origin, explicit confirmation using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
+ * OWNER-only, same-origin, explicit confirmation that the reviewed payload contains no sensitive or customer data, using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
  * @summary Manually analyze one imported operation with Jev
  */
 export const AnalyzeApiOperationParams = zod.object({
@@ -823,7 +823,8 @@ export const analyzeApiOperationBodyPreflightTokenMax = 128;
 
 
 export const AnalyzeApiOperationBody = zod.object({
-  "preflightToken": zod.string().min(analyzeApiOperationBodyPreflightTokenMin).max(analyzeApiOperationBodyPreflightTokenMax)
+  "preflightToken": zod.string().min(analyzeApiOperationBodyPreflightTokenMin).max(analyzeApiOperationBodyPreflightTokenMax),
+  "confirmedNoSensitiveData": zod.literal(true)
 })
 
 export const analyzeApiOperationResponseConfidenceMin = 0;

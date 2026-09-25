@@ -13,12 +13,12 @@ import {
 } from "@workspace/api-zod";
 import { actorId, requireSameOrigin, requireWorkspaceMembership, requireWorkspaceOwner } from "../middlewares/auth";
 import { SemanticAnalysisService } from "../services/semantic-analysis";
+import { recordSemanticAnalysisDenial } from "../services/semantic-analysis-denial-audit";
 
 const router: IRouter = Router();
 const service = new SemanticAnalysisService();
 
 const base = "/workspaces/:workspaceId/apis/:apiId";
-router.use(base, requireWorkspaceMembership);
 
 async function recordEarlyDenial(req: Request, reason: "owner_required" | "origin_invalid" | "invalid_request") {
   try {
@@ -32,7 +32,9 @@ async function recordEarlyDenial(req: Request, reason: "owner_required" | "origi
 
 async function requireAnalysisOwner(req: Request, res: Response, next: NextFunction): Promise<void> {
   let passed = false;
-  await requireWorkspaceOwner(req, res, () => { passed = true; next(); });
+  const requestCategory = req.path.endsWith("/preflight") ? "preflight" : "confirmation";
+  await requireWorkspaceOwner(req, res, () => { passed = true; next(); }, () =>
+    recordSemanticAnalysisDenial(actorId(req), requestCategory, "workspace_unavailable"));
   if (!passed) await recordEarlyDenial(req, "owner_required");
 }
 
@@ -80,7 +82,14 @@ router.post(
     }
     const input = AnalyzeApiOperationBody.strict().safeParse(req.body);
     if (!input.success) {
-      await recordEarlyDenial(req, "invalid_request");
+      if ((req.body as { confirmedNoSensitiveData?: unknown } | null)?.confirmedNoSensitiveData === false ||
+          !isRecordBody(req.body) || !("confirmedNoSensitiveData" in req.body)) {
+        try {
+          await service.recordConfirmationDenial(actorId(req));
+        } catch { /* Preserve the original request validation response. */ }
+      } else {
+        await recordEarlyDenial(req, "invalid_request");
+      }
       res.status(400).json({ error: "A valid preflight token is required", code: "INVALID_INPUT" });
       return;
     }
@@ -90,10 +99,17 @@ router.post(
       params.data.operationId,
       actorId(req),
       input.data.preflightToken,
+      input.data.confirmedNoSensitiveData,
     );
     res.json(AnalyzeApiOperationResponse.parse(result));
   },
 );
+
+function isRecordBody(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+router.use(base, requireWorkspaceMembership);
 
 router.get(
   `${base}/operations/:operationId/semantic-proposals`,

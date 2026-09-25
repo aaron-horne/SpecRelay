@@ -7,6 +7,7 @@ import {
   apiSpecVersionsTable,
   auditEventsTable,
   db,
+  semanticAnalysisDenialEventsTable,
   semanticAnalysisPreflightTokensTable,
   semanticAnalysisProposalsTable,
   semanticProviderConfigsTable,
@@ -90,7 +91,7 @@ async function prepare(service: SemanticAnalysisService, data: Awaited<ReturnTyp
 
 async function analyzePrepared(service: SemanticAnalysisService, data: Awaited<ReturnType<typeof fixture>>) {
   const preflight = await prepare(service, data);
-  return service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+  return service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
 }
 
 function mcpTools(workspaceId: string, ownerId: string) {
@@ -129,7 +130,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
       judgment: Promise.resolve({ abstained: true, confidence: 1 } as JevAnalysisJudgment),
     })) };
     const service = new SemanticAnalysisService(adapter);
-    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, memberId, "unused"))
+    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, memberId, "unused", true))
       .rejects.toMatchObject({ status: 403, code: "OWNER_REQUIRED" });
 
     await request(app).post(endpoint).set(auth(data.ownerId)).send({}).expect(403);
@@ -146,11 +147,11 @@ describe.sequential("manual Jev semantic analysis security", () => {
       .send({ operation: "caller supplied data" }).expect(400);
     const preflight = await prepare(service, data);
     process.env.SEMANTIC_PROVIDERS_ENABLED = "false";
-    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken))
+    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true))
       .rejects.toMatchObject({ status: 503, code: "SEMANTIC_PROVIDERS_DISABLED" });
     process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
     await data.provider.setReady(data.workspaceId, data.ownerId, false);
-    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken))
+    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true))
       .rejects.toMatchObject({ status: 409, code: "SEMANTIC_ANALYSIS_NOT_READY" });
     expect(adapter.dispatch).not.toHaveBeenCalled();
   });
@@ -177,6 +178,99 @@ describe.sequential("manual Jev semantic analysis security", () => {
     });
   });
 
+  it("audits unauthenticated and unavailable-workspace analysis denials without target data or response leakage", async () => {
+    const data = await fixture();
+    const priorEvents = await db.select({ id: semanticAnalysisDenialEventsTable.id })
+      .from(semanticAnalysisDenialEventsTable);
+    const priorEventIds = new Set(priorEvents.map((event) => event.id));
+    const base = `/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}/semantic-analysis`;
+    const unauthenticatedPreflight = await request(app).post(`${base}/preflight`)
+      .set(auth("__unauthenticated__")).send({});
+    const unauthenticatedConfirmation = await request(app).post(base)
+      .set(auth("__unauthenticated__")).send({});
+    const malformedConfirmation = await request(app).post(base)
+      .set(auth("__unauthenticated__"))
+      .set("content-type", "application/json")
+      .send("{");
+    expect(unauthenticatedPreflight.status).toBe(401);
+    expect(unauthenticatedConfirmation.status).toBe(401);
+    expect(malformedConfirmation.status).toBe(400);
+
+    const actor = `semantic-analysis-outsider-${randomUUID()}`;
+    const nonmemberPreflight = await request(app).post(`${base}/preflight`).set(auth(actor)).send({});
+    const nonmemberConfirmation = await request(app).post(base).set(auth(actor)).send({});
+    const unknownWorkspaceId = randomUUID();
+    const unknownTarget = `/api/workspaces/${unknownWorkspaceId}/apis/${randomUUID()}/operations/${randomUUID()}/semantic-analysis`;
+    const unknownPreflight = await request(app).post(`${unknownTarget}/preflight`).set(auth(actor)).send({});
+    const unknownConfirmation = await request(app).post(unknownTarget).set(auth(actor)).send({});
+    for (const response of [nonmemberPreflight, unknownPreflight]) {
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
+    }
+    for (const response of [nonmemberConfirmation, unknownConfirmation]) {
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: "Workspace not found", code: "WORKSPACE_NOT_FOUND" });
+    }
+
+    const events = await db.select().from(semanticAnalysisDenialEventsTable);
+    const newEvents = events.filter((event) => !priorEventIds.has(event.id));
+    const unauthenticated = newEvents.filter((event) => event.reasonClass === "unauthenticated");
+    expect(unauthenticated.map((event) => event.requestCategory).sort()).toEqual(["confirmation", "preflight"]);
+    expect(unauthenticated.every((event) => event.actorId === null)).toBe(true);
+    expect(newEvents.filter((event) => event.reasonClass === "request_rejected").map((event) => [
+      event.actorId,
+      event.requestCategory,
+    ])).toEqual([[null, "confirmation"]]);
+    const unavailable = newEvents.filter((event) => event.reasonClass === "workspace_unavailable");
+    expect(unavailable.map((event) => [event.actorId, event.requestCategory]).sort())
+      .toEqual([[actor, "confirmation"], [actor, "confirmation"], [actor, "preflight"], [actor, "preflight"]]);
+    expect(JSON.stringify(events)).not.toContain(data.workspaceId);
+    expect(JSON.stringify(events)).not.toContain(data.apiId);
+    expect(JSON.stringify(events)).not.toContain(data.operationId);
+    expect(JSON.stringify(events)).not.toContain(unknownWorkspaceId);
+  });
+
+  it("requires explicit no-sensitive-data confirmation before token use or reservation", async () => {
+    const data = await fixture();
+    const preflight = await prepare(new SemanticAnalysisService(), data);
+    const endpoint = `/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}/semantic-analysis`;
+    const priorDenials = await db.select({ id: semanticAnalysisDenialEventsTable.id })
+      .from(semanticAnalysisDenialEventsTable)
+      .where(eq(semanticAnalysisDenialEventsTable.reasonClass, "payload_confirmation_required"));
+    const priorDenialIds = new Set(priorDenials.map((event) => event.id));
+    const dispatch = vi.fn();
+    await expect(new SemanticAnalysisService({ dispatch }).analyze(
+      data.workspaceId,
+      data.apiId,
+      data.operationId,
+      data.ownerId,
+      preflight.preflightToken,
+      false,
+    )).rejects.toMatchObject({ status: 400, code: "SEMANTIC_ANALYSIS_CONFIRMATION_REQUIRED" });
+    expect(dispatch).not.toHaveBeenCalled();
+    const missing = await request(app).post(endpoint).set(auth(data.ownerId)).set("origin", sameOrigin)
+      .send({ preflightToken: preflight.preflightToken });
+    const negative = await request(app).post(endpoint).set(auth(data.ownerId)).set("origin", sameOrigin)
+      .send({ preflightToken: preflight.preflightToken, confirmedNoSensitiveData: false });
+    expect(missing.status).toBe(400);
+    expect(negative.status).toBe(400);
+    expect(missing.body).toEqual(negative.body);
+    const tokens = await db.select().from(semanticAnalysisPreflightTokensTable)
+      .where(eq(semanticAnalysisPreflightTokensTable.workspaceId, data.workspaceId));
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.consumedAt).toBeNull();
+    const reservations = await db.select().from(auditEventsTable).where(and(
+      eq(auditEventsTable.workspaceId, data.workspaceId),
+      eq(auditEventsTable.eventType, "semantic_analysis.reserved"),
+    ));
+    expect(reservations).toHaveLength(0);
+    const denials = (await db.select().from(semanticAnalysisDenialEventsTable))
+      .filter((event) => event.reasonClass === "payload_confirmation_required" && !priorDenialIds.has(event.id));
+    expect(denials.map((event) => event.requestCategory)).toEqual(["confirmation", "confirmation", "confirmation"]);
+    expect(JSON.stringify(denials)).not.toContain(preflight.preflightToken);
+    expect(JSON.stringify(denials)).not.toContain(JSON.stringify(preflight.payload));
+  });
+
   it("sends only bounded redacted operation fields and persists a source-grounded console overlay", async () => {
     const data = await fixture();
     let sentOperation: JevOperationInput | undefined;
@@ -200,7 +294,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
     });
     const service = new SemanticAnalysisService({ dispatch });
     const preflight = await prepare(service, data);
-    const result = await service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    const result = await service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(result.outcome).toBe("proposal");
     expect(result.proposal).toMatchObject({ status: "pending", confidence: 0.91, sourceField: "summary" });
@@ -275,7 +369,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
       ((preflight.payload as { state: { candidates: Array<{ id: string; text: string }> } }).state.candidates)
         .map((candidate) => ({ ...candidate, sourceField: "" })),
     ));
-    await service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    await service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(outboundBody).toBe(JSON.stringify(preflight.payload));
   });
@@ -359,8 +453,8 @@ describe.sequential("manual Jev semantic analysis security", () => {
     const service = new SemanticAnalysisService({ dispatch });
     const preflight = await prepare(service, data);
     const attempts = await Promise.allSettled([
-      service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken),
-      service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken),
+      service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true),
+      service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true),
     ]);
     expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
     expect(dispatch).toHaveBeenCalledTimes(1);
@@ -390,7 +484,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
       },
     });
     const preflight = await prepare(service, data);
-    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     await pending.begun;
     await db.delete(workspaceMembershipsTable).where(and(
       eq(workspaceMembershipsTable.workspaceId, data.workspaceId),
@@ -412,7 +506,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
     });
     const service = new SemanticAnalysisService({ dispatch });
     const preflight = await prepare(service, data);
-    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     await pending.begun;
     process.env.SEMANTIC_PROVIDERS_ENABLED = "false";
     pending.finish({ abstained: false, candidateId: "c1", confidence: 0.99 });
@@ -438,7 +532,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
     });
     const service = new SemanticAnalysisService({ dispatch });
     const preflight = await prepare(service, data);
-    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     await pending.begun;
     await data.provider.setReady(data.workspaceId, data.ownerId, false);
     pending.finish({ abstained: false, candidateId: "c1", confidence: 0.99 });
@@ -458,7 +552,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
     });
     const service = new SemanticAnalysisService({ dispatch });
     const preflight = await prepare(service, data);
-    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken);
+    const analyzing = service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, preflight.preflightToken, true);
     await pending.begun;
     const [before] = await db.select().from(semanticProviderConfigsTable)
       .where(eq(semanticProviderConfigsTable.workspaceId, data.workspaceId));
@@ -487,7 +581,7 @@ describe.sequential("manual Jev semantic analysis security", () => {
     const result = await analyzePrepared(service, data);
     await service.decide(data.workspaceId, data.apiId, result.proposal!.id, data.ownerId, "rejected");
     const nextPreflight = await prepare(service, data);
-    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, nextPreflight.preflightToken))
+    await expect(service.analyze(data.workspaceId, data.apiId, data.operationId, data.ownerId, nextPreflight.preflightToken, true))
       .rejects.toMatchObject({ status: 409, code: "SEMANTIC_ANALYSIS_RATE_LIMITED" });
     expect(dispatch).toHaveBeenCalledTimes(1);
     const rejected = await db.select().from(auditEventsTable).where(and(

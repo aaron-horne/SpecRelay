@@ -2138,7 +2138,7 @@ export const getAnalyzeApiOperationUrl = (workspaceId: string,
 }
 
 /**
- * OWNER-only, same-origin, explicit confirmation using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
+ * OWNER-only, same-origin, explicit confirmation that the reviewed payload contains no sensitive or customer data, using a short-lived preflight token. Sends only the exact prepared payload. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the import.
  * @summary Manually analyze one imported operation with Jev
  */
 export const analyzeApiOperation = async (workspaceId: string,

@@ -13,3 +13,4 @@ export * from "./execution-leases";
 export * from "./semantic-provider-configs";
 export * from "./semantic-analysis-proposals";
 export * from "./semantic-analysis-preflight-tokens";
+export * from "./semantic-analysis-denial-events";
