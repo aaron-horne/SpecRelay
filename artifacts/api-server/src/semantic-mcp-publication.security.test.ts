@@ -7,6 +7,7 @@ import {
   apiSpecVersionsTable,
   auditEventsTable,
   db,
+  operationPoliciesTable,
   semanticAnalysisProposalsTable,
   semanticProviderConfigsTable,
   workspaceMembershipsTable,
@@ -67,14 +68,13 @@ async function fixture() {
 
   process.env.SEMANTIC_PROVIDERS_ENABLED = "true";
   process.env.SEMANTIC_PROVIDER_TEST_WORKSPACE_IDS = workspaceId;
-  const providerAdapter: SemanticProviderAdapter = {
-    async dispatch() { return { outcome: Promise.resolve("success") }; },
-  };
+  const providerDispatch = vi.fn(async () => ({ outcome: Promise.resolve("success" as const) }));
+  const providerAdapter: SemanticProviderAdapter = { dispatch: providerDispatch };
   const provider = new SemanticProviderService(providerAdapter);
   await provider.saveKey(workspaceId, ownerId, secret);
   await provider.test(workspaceId, ownerId);
   await provider.setReady(workspaceId, ownerId, true);
-  return { workspaceId, apiId, operationId, ownerId, provider };
+  return { workspaceId, apiId, operationId, ownerId, provider, providerDispatch };
 }
 
 function mcp(workspaceId: string, method: string, params?: object, actorId?: string) {
@@ -156,6 +156,81 @@ afterEach(() => {
 });
 
 describe.sequential("Phase 3 MCP description publication security", () => {
+  it("blocks preview and direct publication when tools/list cannot list the operation without changing governance", async () => {
+    const data = await fixture();
+    const { proposalId, dispatch } = await createProposal(data);
+    const path = publicationPath(data.workspaceId, data.apiId, proposalId);
+    const eligiblePreview = await previewPublication(path, data.ownerId).expect(200);
+
+    await request(app).patch(`/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}`)
+      .set(auth(data.ownerId)).send({ enabled: false }).expect(200);
+    const [disabledOperation] = await db.select().from(apiOperationsTable)
+      .where(eq(apiOperationsTable.id, data.operationId));
+    const [disabledPolicy] = await db.select().from(operationPoliciesTable)
+      .where(eq(operationPoliciesTable.operationId, data.operationId));
+    expect(descriptors(await mcp(data.workspaceId, "tools/list", undefined, data.ownerId).expect(200))).toEqual([]);
+
+    const deniedPreview = await previewPublication(path, data.ownerId).expect(409);
+    expect(deniedPreview.body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    const deniedPublish = await request(app).post(path).set(auth(data.ownerId)).set("origin", sameOrigin)
+      .send({ previewToken: eligiblePreview.body.previewToken }).expect(409);
+    expect(deniedPublish.body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    expect(await db.select().from(apiOperationsTable).where(eq(apiOperationsTable.id, data.operationId)))
+      .toEqual([disabledOperation]);
+    expect(await db.select().from(operationPoliciesTable).where(eq(operationPoliciesTable.operationId, data.operationId)))
+      .toEqual([disabledPolicy]);
+    const [accepted] = await db.select().from(semanticAnalysisProposalsTable)
+      .where(eq(semanticAnalysisProposalsTable.id, proposalId));
+    expect(accepted).toMatchObject({ status: "accepted", mcpPublishedAt: null });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(data.providerDispatch).toHaveBeenCalledTimes(1);
+
+    await request(app).patch(`/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}`)
+      .set(auth(data.ownerId)).send({ enabled: true }).expect(200);
+    const [eligibleOperation] = await db.select().from(apiOperationsTable)
+      .where(eq(apiOperationsTable.id, data.operationId));
+    const [eligiblePolicy] = await db.select().from(operationPoliciesTable)
+      .where(eq(operationPoliciesTable.operationId, data.operationId));
+    const preview = await previewPublication(path, data.ownerId).expect(200);
+    await request(app).post(path).set(auth(data.ownerId)).set("origin", sameOrigin)
+      .send({ previewToken: preview.body.previewToken }).expect(200);
+    expect(await db.select().from(apiOperationsTable).where(eq(apiOperationsTable.id, data.operationId)))
+      .toEqual([eligibleOperation]);
+    expect(await db.select().from(operationPoliciesTable).where(eq(operationPoliciesTable.operationId, data.operationId)))
+      .toEqual([eligiblePolicy]);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(data.providerDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires ALLOW and execution approval independently, plus the remaining listing rules", async () => {
+    const data = await fixture();
+    const { proposalId, dispatch } = await createProposal(data);
+    const path = publicationPath(data.workspaceId, data.apiId, proposalId);
+    const baselinePreview = await previewPublication(path, data.ownerId).expect(200);
+    const policyWhere = eq(operationPoliciesTable.operationId, data.operationId);
+    const operationWhere = eq(apiOperationsTable.id, data.operationId);
+
+    await db.update(operationPoliciesTable).set({ decision: "DENY" }).where(policyWhere);
+    expect(descriptors(await mcp(data.workspaceId, "tools/list", undefined, data.ownerId).expect(200))).toEqual([]);
+    expect((await previewPublication(path, data.ownerId).expect(409)).body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    expect((await request(app).post(path).set(auth(data.ownerId)).set("origin", sameOrigin)
+      .send({ previewToken: baselinePreview.body.previewToken }).expect(409)).body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    await db.update(operationPoliciesTable).set({ decision: "ALLOW", executionApproved: false }).where(policyWhere);
+    expect((await previewPublication(path, data.ownerId).expect(409)).body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    await db.update(operationPoliciesTable).set({ executionApproved: true }).where(policyWhere);
+    await db.update(apiOperationsTable).set({ method: "POST" }).where(operationWhere);
+    expect((await previewPublication(path, data.ownerId).expect(409)).body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    await db.update(apiOperationsTable).set({ method: "GET" }).where(operationWhere);
+    await db.update(apiSpecVersionsTable).set({ serverUrls: ["http://publication.example.test/v1"] })
+      .where(eq(apiSpecVersionsTable.apiId, data.apiId));
+    expect((await previewPublication(path, data.ownerId).expect(409)).body.code).toBe("SEMANTIC_MCP_OPERATION_NOT_LISTABLE");
+    const [proposal] = await db.select().from(semanticAnalysisProposalsTable)
+      .where(eq(semanticAnalysisProposalsTable.id, proposalId));
+    expect(proposal).toMatchObject({ status: "accepted", mcpPublishedAt: null });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(data.providerDispatch).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps acceptance and preview private, then publishes only after OWNER confirmation", async () => {
     const data = await fixture();
     const { proposalId, dispatch } = await createProposal(data);
@@ -273,7 +348,25 @@ describe.sequential("Phase 3 MCP description publication security", () => {
     expect(descriptors(await mcp(data.workspaceId, "tools/list", undefined, data.ownerId).expect(200))[0]?.description)
       .toBe("Read a record (unauthenticated)");
 
+    await request(app).patch(`/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}`)
+      .set(auth(data.ownerId)).send({ enabled: false }).expect(200);
+    expect(descriptors(await mcp(data.workspaceId, "tools/list", undefined, data.ownerId).expect(200))).toEqual([]);
+    const [disabledOperation] = await db.select().from(apiOperationsTable)
+      .where(eq(apiOperationsTable.id, data.operationId));
+    const [disabledPolicy] = await db.select().from(operationPoliciesTable)
+      .where(eq(operationPoliciesTable.operationId, data.operationId));
     await request(app).delete(path).set(auth(data.ownerId)).set("origin", sameOrigin).expect(200);
+    expect(await db.select().from(apiOperationsTable).where(eq(apiOperationsTable.id, data.operationId)))
+      .toEqual([disabledOperation]);
+    expect(await db.select().from(operationPoliciesTable).where(eq(operationPoliciesTable.operationId, data.operationId)))
+      .toEqual([disabledPolicy]);
+    const [afterRevoke] = await db.select().from(semanticAnalysisProposalsTable)
+      .where(eq(semanticAnalysisProposalsTable.id, proposalId));
+    expect(afterRevoke).toMatchObject({ status: "accepted", mcpPublishedAt: null });
+    expect(data.providerDispatch).toHaveBeenCalledTimes(1);
+
+    await request(app).patch(`/api/workspaces/${data.workspaceId}/apis/${data.apiId}/operations/${data.operationId}`)
+      .set(auth(data.ownerId)).send({ enabled: true }).expect(200);
     expect(descriptors(await mcp(data.workspaceId, "tools/list", undefined, data.ownerId).expect(200))[0]?.description)
       .toBe("Imported operation description (unauthenticated)");
     const reusedGrant = await request(app).post(path).set(auth(data.ownerId)).set("origin", sameOrigin)

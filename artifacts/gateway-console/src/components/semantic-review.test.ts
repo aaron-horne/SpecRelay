@@ -12,4 +12,10 @@ describe("semantic review privacy copy", () => {
     expect(componentSource).toMatch(/Automated scanning is a backstop, not a guarantee/)
     expect(componentSource).toMatch(/workspace owner, review this exact payload and confirm it contains no sensitive, customer, or session data before dispatch/)
   })
+  it("blocks locally ineligible MCP publication and explains server-only listing requirements", () => {
+    expect(componentSource).toContain("disabled={busy || locallyBlocked}")
+    expect(componentSource).toContain("disabled={!preview || !canManage || busy || locallyBlocked}")
+    expect(componentSource).toContain("policy ALLOW, execution approval, an executable HTTPS server")
+    expect(componentSource).toContain("setError(errorMessage(cause, \"The MCP publication preview could not be prepared.")
+  })
 })

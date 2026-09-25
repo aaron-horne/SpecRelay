@@ -4,12 +4,14 @@ import {
   apiOperationsTable,
   auditEventsTable,
   db,
+  operationPoliciesTable,
   semanticAnalysisProposalsTable,
   semanticProviderConfigsTable,
   workspacesTable,
 } from "@workspace/db";
 import { createMcpTool } from "@workspace/mcp";
 import { ServiceError } from "./errors";
+import { isMcpListableOperation } from "./mcp-listing-eligibility";
 import { authenticationMode, operationView } from "./mcp-operation-view";
 import {
   acquireApiLock,
@@ -57,6 +59,25 @@ async function validPreview(
       proposal.providerConfigId !== credential.id ||
       proposal.credentialRevision !== credential.credentialRevision) {
     throw new ServiceError("The accepted description is no longer current", 409, "SEMANTIC_MCP_PROPOSAL_STALE");
+  }
+  const [policy] = await tx.select({
+    decision: operationPoliciesTable.decision,
+    approved: operationPoliciesTable.executionApproved,
+  }).from(operationPoliciesTable).where(and(
+    eq(operationPoliciesTable.workspaceId, workspaceId),
+    eq(operationPoliciesTable.operationId, operation.id),
+  )).limit(1);
+  if (!policy || !(await isMcpListableOperation(workspaceId, {
+    operation,
+    ...policy,
+    serverUrls: specification.serverUrls,
+    securitySchemes: specification.securitySchemes,
+  }))) {
+    throw new ServiceError(
+      "This operation is not currently in MCP tools/list. It must be enabled, have policy ALLOW and execution approval, be an HTTPS GET without a request body with only path/query parameters, and have compatible credentials when required. The accepted description remains console-only.",
+      409,
+      "SEMANTIC_MCP_OPERATION_NOT_LISTABLE",
+    );
   }
   const tool = createMcpTool({
     ...operationView(operation, authenticationMode(operation, specification.securitySchemes)),

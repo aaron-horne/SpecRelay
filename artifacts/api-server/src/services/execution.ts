@@ -18,6 +18,7 @@ import {
   type OutboundRequestBroker,
 } from "@workspace/security";
 import { ServiceError } from "./errors";
+import { isExecutableServer, isMcpListableOperation } from "./mcp-listing-eligibility";
 import { authenticationMode, operationView, securityGroupsFor } from "./mcp-operation-view";
 import { publishedMcpDescriptions } from "./semantic-mcp-publication";
 import { securityServices } from "./security";
@@ -27,28 +28,6 @@ const lockKey = (workspaceId: string, apiId: string) => `${workspaceId}:${apiId}
 type LeaseClient = PoolClient;
 
 type ToolArguments = Readonly<Record<string, unknown>>;
-
-function isExecutableServer(url: string | undefined): boolean {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
-  } catch {
-    return false;
-  }
-}
-
-function destinationHost(url: string | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && !parsed.username && !parsed.password
-      ? parsed.host.toLowerCase()
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 function applyArguments(
   serverUrl: string,
@@ -437,26 +416,9 @@ export class McpService {
       securitySchemes: typeof apiSpecVersionsTable.$inferSelect.securitySchemes;
     }> = [];
     for (const { operation, documentHash, serverUrls, securitySchemes, approved, decision } of currentRows) {
-      if (
-        !operation.enabled ||
-        !approved ||
-        decision !== "ALLOW" ||
-        operation.method.toUpperCase() !== "GET" ||
-        operation.requestBody ||
-        !isExecutableServer(serverUrls[0]) ||
-        !operation.parameters.every((parameter) => parameter.location === "path" || parameter.location === "query")
-      ) continue;
-      const groups = securityGroupsFor(operation);
-      if (groups.length > 0 && !groups.some((group) => group.length === 0)) {
-        const host = destinationHost(serverUrls[0]);
-        if (!host || !(await securityServices.credentialProvider.isConfigured({
-          workspaceId,
-          apiSourceId: operation.apiId,
-          destinationHost: host,
-          groups,
-          schemes: securitySchemes,
-        }))) continue;
-      }
+      if (!(await isMcpListableOperation(workspaceId, {
+        operation, serverUrls, securitySchemes, approved, decision,
+      }))) continue;
       eligibleOperations.push({ operation, documentHash, securitySchemes });
     }
     const descriptions = await publishedMcpDescriptions(workspaceId, eligibleOperations);

@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
+import { localMcpListingBlockers } from "./mcp-publication-eligibility"
 
 type Props = {
   workspaceId: string
@@ -84,9 +85,10 @@ const statusStyle: Record<SemanticAnalysisProposal["status"], string> = {
   stale: "border-border bg-muted text-muted-foreground"
 }
 
-function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, canManage }: {
+function McpPublication({ workspaceId, apiId, operation, proposal, displayedProposalId, canManage }: {
   workspaceId: string
   apiId: string
+  operation: ApiOperation
   proposal: SemanticAnalysisProposal
   displayedProposalId: string
   canManage: boolean
@@ -100,9 +102,11 @@ function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, can
   const publish = usePublishSemanticMcpDescription()
   const revoke = useRevokeSemanticMcpDescription()
   const busy = previewRequest.isPending || publish.isPending || revoke.isPending
+  const listingBlockers = localMcpListingBlockers(operation)
+  const locallyBlocked = listingBlockers.length > 0
 
   function handlePreview() {
-    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || busy) return
+    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || busy || locallyBlocked) return
     setPreview(null)
     setError(null)
     previewRequest.mutate({ workspaceId, apiId, proposalId: proposal.id }, {
@@ -112,7 +116,7 @@ function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, can
   }
 
   function handlePublish() {
-    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || !preview || busy) return
+    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || !preview || busy || locallyBlocked) return
     setError(null)
     publish.mutate({ workspaceId, apiId, proposalId: proposal.id, data: { previewToken: preview.previewToken } }, {
       onSuccess: () => {
@@ -153,7 +157,7 @@ function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, can
             <Radio className="h-4 w-4" aria-hidden="true" /> MCP publication
           </p>
           <p className="text-xs text-muted-foreground" data-testid="status-semantic-mcp-publication">
-            {proposal.mcpPublishedAt ? `Published ${dateLabel(proposal.mcpPublishedAt)} · MCP tools/list uses this description.` : "Not published · MCP tools/list continues to use the imported description."}
+            {proposal.mcpPublishedAt ? `Published ${dateLabel(proposal.mcpPublishedAt)} · Used only while this operation appears in MCP tools/list.` : "Not published · MCP tools/list continues to use the imported description."}
           </p>
           {proposal.mcpPublishedAt && proposal.id !== displayedProposalId && (
             <div className="space-y-1 rounded-md border border-primary/25 bg-background/40 p-3">
@@ -167,12 +171,18 @@ function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, can
             <RotateCcw className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Revoke MCP publication
           </Button>
         ) : (
-          <Button size="sm" variant="outline" onClick={handlePreview} disabled={busy} data-testid="button-preview-semantic-mcp-publication">
+          <Button size="sm" variant="outline" onClick={handlePreview} disabled={busy || locallyBlocked} data-testid="button-preview-semantic-mcp-publication">
             <Radio className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
             {previewRequest.isPending ? "Preparing MCP preview..." : "Publish this accepted description to MCP"}
           </Button>
         ))}
       </div>
+      {!proposal.mcpPublishedAt && (
+        <div className="space-y-1 text-xs text-muted-foreground" data-testid="status-semantic-mcp-listing-requirements">
+          {listingBlockers.map((reason) => <p key={reason}>{reason}</p>)}
+          <p>Before publishing, the operation must also have policy ALLOW, execution approval, an executable HTTPS server, and compatible credentials if required. The server checks all MCP tools/list requirements again at preview and confirmation; acceptance stays console-only until then.</p>
+        </div>
+      )}
       {previewRequest.isPending && <div aria-label="Preparing MCP publication preview" className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-12 w-full" /></div>}
       {error && <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive" data-testid="status-semantic-mcp-error">{error}</div>}
       <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open && !publish.isPending) setPreview(null) }}>
@@ -197,7 +207,7 @@ function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, can
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPreview(null)} disabled={publish.isPending} data-testid="button-cancel-semantic-mcp-publication">Cancel</Button>
-            <Button onClick={handlePublish} disabled={!preview || !canManage || busy} data-testid="button-confirm-semantic-mcp-publication">
+            <Button onClick={handlePublish} disabled={!preview || !canManage || busy || locallyBlocked} data-testid="button-confirm-semantic-mcp-publication">
               {publish.isPending ? "Publishing..." : "Confirm publish"}
             </Button>
           </DialogFooter>
@@ -501,7 +511,7 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
                 <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-accepted-description-empty">No accepted description for this specification. The imported source remains the only description.</p>
               )}
               <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">Acceptance alone does not edit the OpenAPI document or change MCP tool descriptions or execution. MCP publication requires a separate owner confirmation.</p>
-              {publicationProposal && <McpPublication key={`${workspaceId}:${apiId}:${operation.id}:${operation.specificationId}:${publicationProposal.id}`} workspaceId={workspaceId} apiId={apiId} proposal={publicationProposal} displayedProposalId={accepted?.id ?? publicationProposal.id} canManage={canManage} />}
+              {publicationProposal && <McpPublication key={`${workspaceId}:${apiId}:${operation.id}:${operation.specificationId}:${publicationProposal.id}`} workspaceId={workspaceId} apiId={apiId} operation={operation} proposal={publicationProposal} displayedProposalId={accepted?.id ?? publicationProposal.id} canManage={canManage} />}
             </div>
           </div>
 
