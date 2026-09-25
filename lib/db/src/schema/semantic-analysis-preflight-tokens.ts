@@ -8,7 +8,7 @@ export const semanticAnalysisPreflightTokensTable = pgTable(
     tokenHash: text("token_hash").primaryKey(),
     tokenKind: text("token_kind").notNull().default("preflight"),
     actorId: text("actor_id").notNull(),
-    workspaceId: uuid("workspace_id").notNull().references(() => workspacesTable.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").notNull(),
     workspaceIsLive: boolean("workspace_is_live").notNull().default(true),
     apiId: uuid("api_id").notNull(),
     operationId: uuid("operation_id").notNull(),
@@ -24,6 +24,8 @@ export const semanticAnalysisPreflightTokensTable = pgTable(
   (table) => [
     index("semantic_analysis_preflight_expiry_idx").on(table.expiresAt),
     check("semantic_analysis_preflight_tokens_kind_check", sql`${table.tokenKind} IN ('preflight', 'dispatch')`),
+    // Publish includes this declarative live-workspace guard; custom SQL triggers are not
+    // included in its generated schema diff. The CHECK prevents bypassing the FK with false.
     foreignKey({
       columns: [table.workspaceId, table.workspaceIsLive],
       foreignColumns: [workspacesTable.id, workspacesTable.isLive],

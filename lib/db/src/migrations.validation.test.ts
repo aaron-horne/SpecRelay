@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -33,6 +34,7 @@ const migrationNames = [
   "0019_semantic_denials_and_preflight_guard_cleanup.sql",
   "0020_semantic_analysis_dispatch_token_kinds.sql",
   "0021_semantic_denial_dispatch_category.sql",
+  "0022_preflight_publishable_live_guard.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {
@@ -143,11 +145,34 @@ async function expectWorkspaceLiveGuards(client: pg.PoolClient, validated = 10, 
 }
 
 describe("migration reconciliation", () => {
+  it("exports the live-workspace guard as additive declarative SQL", () => {
+    const exported = execFileSync(
+      "pnpm",
+      ["--filter", "@workspace/db", "exec", "drizzle-kit", "export", "--config", "./drizzle.config.ts"],
+      { encoding: "utf8" },
+    );
+    expect(exported.match(/CONSTRAINT "semantic_analysis_preflight_tokens_live_check"/g)).toHaveLength(1);
+    expect(exported.match(/ADD CONSTRAINT "semantic_analysis_preflight_tokens_workspace_live_fk"/g)).toHaveLength(1);
+    expect(exported).toMatch(
+      /FOREIGN KEY \("workspace_id","workspace_is_live"\) REFERENCES "public"\."workspaces"\("id","is_live"\)/,
+    );
+    expect(exported).toContain('CONSTRAINT "workspaces_live_marker_check"');
+    expect(exported).not.toContain("semantic_analysis_preflight_tokens_workspace_id_fkey");
+    expect(exported).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE|UPDATE)\b/im);
+    expect(exported).not.toMatch(/\bCREATE\s+(CONSTRAINT\s+)?TRIGGER\b/i);
+  });
+
   it("contains no destructive migration operations", async () => {
     for (const name of migrationNames) {
       const migration = await readFile(path.join(migrationsDirectory, name), "utf8");
       const permittedGuardCleanup = migration.replace(
         /DROP TRIGGER IF EXISTS "semantic_analysis_preflight_tokens_reject_deleted_workspace_write"\s+ON "semantic_analysis_preflight_tokens";/g,
+        "",
+      ).replace(
+        /DROP TRIGGER IF EXISTS "semantic_preflight_tokens_reject_deleted_workspace_write"\s+ON "semantic_analysis_preflight_tokens";/g,
+        "",
+      ).replace(
+        /DROP CONSTRAINT IF EXISTS "semantic_analysis_preflight_tokens_workspace_id_fkey";/g,
         "",
       ).replace(
         /DROP CONSTRAINT IF EXISTS "semantic_analysis_denial_events_category_check",/g,
@@ -362,6 +387,8 @@ describe("migration reconciliation", () => {
         `);
         await applyMigrations(client, schema, 20, 21);
         await applyMigrations(client, schema, 21, 22);
+        await applyMigrations(client, schema, 22, 23);
+        await applyMigrations(client, schema, 22, 23);
         await client.query(`
           INSERT INTO semantic_analysis_denial_events (request_category, reason_class)
           VALUES ('dispatch', 'request_rejected')
@@ -400,8 +427,27 @@ describe("migration reconciliation", () => {
           WHERE tgrelid = 'semantic_analysis_preflight_tokens'::regclass AND NOT tgisinternal
           ORDER BY tgname
         `);
-        expect(retainedGuard.rows).toEqual([
-          { tgname: "semantic_preflight_tokens_reject_deleted_workspace_write" },
+        expect(retainedGuard.rows).toEqual([]);
+        const publishableGuard = await client.query<{
+          conname: string; contype: string; convalidated: boolean; definition: string;
+        }>(`
+          SELECT conname, contype, convalidated, pg_get_constraintdef(oid) AS definition
+          FROM pg_constraint
+          WHERE conrelid = 'semantic_analysis_preflight_tokens'::regclass
+            AND (contype = 'f' OR conname = 'semantic_analysis_preflight_tokens_live_check')
+          ORDER BY conname
+        `);
+        expect(publishableGuard.rows).toEqual([
+          {
+            conname: "semantic_analysis_preflight_tokens_live_check",
+            contype: "c", convalidated: true,
+            definition: "CHECK ((workspace_is_live = true))",
+          },
+          {
+            conname: "semantic_analysis_preflight_tokens_workspace_live_fk",
+            contype: "f", convalidated: true,
+            definition: "FOREIGN KEY (workspace_id, workspace_is_live) REFERENCES workspaces(id, is_live) ON DELETE CASCADE",
+          },
         ]);
         await client.query(
           "INSERT INTO workspaces (id, name, deleted_at, is_live) VALUES ('f0000000-0000-4000-8000-000000000001', 'Deleted fixture', now(), false)",
