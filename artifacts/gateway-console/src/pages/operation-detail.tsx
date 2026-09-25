@@ -35,6 +35,7 @@ import {
   BreadcrumbSeparator 
 } from "@/components/ui/breadcrumb"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SemanticReview } from "@/components/semantic-review"
 
 const RISK_COLORS: Record<string, string> = {
   READ_LIKE: "text-blue-600 bg-blue-500/10",
@@ -191,6 +192,8 @@ export default function OperationDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <SemanticReview workspaceId={workspaceId} apiId={apiId} operation={op} canManage={api.canManage} />
 
       <div className="grid gap-6 md:grid-cols-4 mt-8">
         <Card className="col-span-1">

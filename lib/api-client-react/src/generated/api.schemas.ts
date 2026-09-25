@@ -401,6 +401,90 @@ export interface SemanticProviderDeleteResult {
   deleted: boolean;
 }
 
+export type SemanticAnalysisProposalProposalKind = typeof SemanticAnalysisProposalProposalKind[keyof typeof SemanticAnalysisProposalProposalKind];
+
+
+export const SemanticAnalysisProposalProposalKind = {
+  description: 'description',
+} as const;
+
+export type SemanticAnalysisProposalStatus = typeof SemanticAnalysisProposalStatus[keyof typeof SemanticAnalysisProposalStatus];
+
+
+export const SemanticAnalysisProposalStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  stale: 'stale',
+} as const;
+
+export interface SemanticAnalysisProposal {
+  id: string;
+  workspaceId: string;
+  apiId: string;
+  specificationId: string;
+  operationId: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  proposalText: string;
+  proposalKind: SemanticAnalysisProposalProposalKind;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  uncertainty: number;
+  /** @maxLength 40 */
+  sourceField: string;
+  status: SemanticAnalysisProposalStatus;
+  createdAt: string;
+  /** @nullable */
+  decidedAt: string | null;
+}
+
+export type SemanticAnalysisResultOutcome = typeof SemanticAnalysisResultOutcome[keyof typeof SemanticAnalysisResultOutcome];
+
+
+export const SemanticAnalysisResultOutcome = {
+  proposal: 'proposal',
+  abstained: 'abstained',
+} as const;
+
+export interface SemanticAnalysisResult {
+  outcome: SemanticAnalysisResultOutcome;
+  specificationId: string;
+  operationId: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  uncertainty: number;
+  proposal: SemanticAnalysisProposal | null;
+}
+
+export type SemanticProposalDecisionDecision = typeof SemanticProposalDecisionDecision[keyof typeof SemanticProposalDecisionDecision];
+
+
+export const SemanticProposalDecisionDecision = {
+  accepted: 'accepted',
+  rejected: 'rejected',
+} as const;
+
+export interface SemanticProposalDecision {
+  decision: SemanticProposalDecisionDecision;
+}
+
 export interface CredentialInput {
   /**
      * @minLength 1

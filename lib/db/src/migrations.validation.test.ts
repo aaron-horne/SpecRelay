@@ -24,6 +24,8 @@ const migrationNames = [
   "0010_reject_deleted_workspace_writes.sql",
   "0011_workspace_live_key_guards.sql",
   "0012_semantic_provider_configs.sql",
+  "0013_semantic_analysis_proposals.sql",
+  "0014_semantic_proposal_credential_binding.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {

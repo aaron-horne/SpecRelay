@@ -92,6 +92,20 @@
       "when": 1790173000000,
       "tag": "0012_semantic_provider_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790174000000,
+      "tag": "0013_semantic_analysis_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790175000000,
+      "tag": "0014_semantic_proposal_credential_binding",
+      "breakpoints": true
     }
   ]
 }

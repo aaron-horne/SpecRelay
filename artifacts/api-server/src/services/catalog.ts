@@ -7,6 +7,7 @@ import {
   db,
   executionLeasesTable,
   operationPoliciesTable,
+  semanticAnalysisProposalsTable,
   workspacesTable,
   type ApiSourceRow,
   type ApiSpecVersionRow,
@@ -280,6 +281,35 @@ export class CatalogService {
           400,
           "SPECIFICATION_IMPORT_FAILED",
         );
+      }
+
+      const staleProposals = await tx
+        .update(semanticAnalysisProposalsTable)
+        .set({ status: "stale", decidedAt: new Date() })
+        .where(and(
+          eq(semanticAnalysisProposalsTable.workspaceId, workspaceId),
+          eq(semanticAnalysisProposalsTable.apiId, apiId),
+          sql`${semanticAnalysisProposalsTable.specificationId} <> ${specification.id}`,
+          sql`${semanticAnalysisProposalsTable.status} <> 'stale'`,
+        ))
+        .returning({
+          id: semanticAnalysisProposalsTable.id,
+          specificationId: semanticAnalysisProposalsTable.specificationId,
+          operationId: semanticAnalysisProposalsTable.operationId,
+        });
+      if (staleProposals.length) {
+        await tx.insert(auditEventsTable).values(staleProposals.map((proposal) => ({
+          workspaceId,
+          eventType: "semantic_analysis.proposal_stale",
+          resourceType: "semantic_analysis_proposal",
+          resourceId: proposal.id,
+          metadata: {
+            apiId,
+            specificationId: proposal.specificationId,
+            operationId: proposal.operationId,
+            reason: "specification_reimported",
+          },
+        })));
       }
 
       const operationRows =

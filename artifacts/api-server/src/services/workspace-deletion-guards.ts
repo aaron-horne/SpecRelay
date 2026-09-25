@@ -22,6 +22,7 @@ const liveChildren = [
   "connector_tokens",
   "execution_leases",
   "semantic_provider_configs",
+  "semantic_analysis_proposals",
 ] as const;
 
 const olderTenantKeys: ForeignKeySpec[] = [
@@ -32,6 +33,9 @@ const olderTenantKeys: ForeignKeySpec[] = [
   { name: "execution_leases_workspace_api_spec_operation_fk", child: "execution_leases", childColumns: ["workspace_id", "api_id", "specification_id", "operation_id"], parent: "api_operations", parentColumns: ["workspace_id", "api_id", "specification_id", "id"] },
   { name: "execution_leases_workspace_specification_fk", child: "execution_leases", childColumns: ["workspace_id", "api_id", "specification_id"], parent: "api_spec_versions", parentColumns: ["workspace_id", "api_id", "id"] },
   { name: "operation_policies_workspace_operation_fk", child: "operation_policies", childColumns: ["workspace_id", "operation_id"], parent: "api_operations", parentColumns: ["workspace_id", "id"] },
+  { name: "semantic_analysis_proposals_workspace_api_fk", child: "semantic_analysis_proposals", childColumns: ["workspace_id", "api_id"], parent: "api_sources", parentColumns: ["workspace_id", "id"] },
+  { name: "semantic_analysis_proposals_specification_fk", child: "semantic_analysis_proposals", childColumns: ["workspace_id", "api_id", "specification_id"], parent: "api_spec_versions", parentColumns: ["workspace_id", "api_id", "id"] },
+  { name: "semantic_analysis_proposals_operation_fk", child: "semantic_analysis_proposals", childColumns: ["workspace_id", "api_id", "specification_id", "operation_id"], parent: "api_operations", parentColumns: ["workspace_id", "api_id", "specification_id", "id"] },
 ];
 
 const liveKeys: ForeignKeySpec[] = liveChildren.map((child) => ({

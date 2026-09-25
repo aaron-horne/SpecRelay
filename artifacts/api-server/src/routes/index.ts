@@ -8,6 +8,7 @@ import credentialsRouter from "./credentials";
 import executionLogsRouter from "./execution-logs";
 import connectorRouter from "./connector-tokens";
 import semanticProvidersRouter from "./semantic-providers";
+import semanticAnalysisRouter from "./semantic-analysis";
 import { connectorMcpAuth } from "../middlewares/connector-auth";
 
 const router: IRouter = Router();
@@ -21,6 +22,7 @@ router.use(credentialsRouter);
 router.use(executionLogsRouter);
 router.use(connectorRouter);
 router.use(semanticProvidersRouter);
+router.use(semanticAnalysisRouter);
 router.use(mcpRouter);
 
 export default router;

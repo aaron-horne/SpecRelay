@@ -786,6 +786,140 @@ export const TestSemanticProviderResponse = zod.object({
 
 
 /**
+ * OWNER-only, same-origin, explicit one-operation analysis. Sends only a bounded, redacted operation description to Jev. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the imported operation.
+ * @summary Manually analyze one imported operation with Jev
+ */
+export const AnalyzeApiOperationParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const analyzeApiOperationResponseConfidenceMin = 0;
+export const analyzeApiOperationResponseConfidenceMax = 1;
+
+export const analyzeApiOperationResponseUncertaintyMin = 0;
+export const analyzeApiOperationResponseUncertaintyMax = 1;
+
+export const analyzeApiOperationResponseProposalOneProposalTextMax = 500;
+
+export const analyzeApiOperationResponseProposalOneConfidenceMin = 0;
+export const analyzeApiOperationResponseProposalOneConfidenceMax = 1;
+
+export const analyzeApiOperationResponseProposalOneUncertaintyMin = 0;
+export const analyzeApiOperationResponseProposalOneUncertaintyMax = 1;
+
+export const analyzeApiOperationResponseProposalOneSourceFieldMax = 40;
+
+
+
+export const AnalyzeApiOperationResponse = zod.object({
+  "outcome": zod.enum(['proposal', 'abstained']),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "confidence": zod.number().min(analyzeApiOperationResponseConfidenceMin).max(analyzeApiOperationResponseConfidenceMax),
+  "uncertainty": zod.number().min(analyzeApiOperationResponseUncertaintyMin).max(analyzeApiOperationResponseUncertaintyMax),
+  "proposal": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "workspaceId": zod.string().uuid(),
+  "apiId": zod.string().uuid(),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "proposalText": zod.string().min(1).max(analyzeApiOperationResponseProposalOneProposalTextMax),
+  "proposalKind": zod.enum(['description']),
+  "confidence": zod.number().min(analyzeApiOperationResponseProposalOneConfidenceMin).max(analyzeApiOperationResponseProposalOneConfidenceMax),
+  "uncertainty": zod.number().min(analyzeApiOperationResponseProposalOneUncertaintyMin).max(analyzeApiOperationResponseProposalOneUncertaintyMax),
+  "sourceField": zod.string().max(analyzeApiOperationResponseProposalOneSourceFieldMax),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
+  "createdAt": zod.coerce.date(),
+  "decidedAt": zod.coerce.date().nullable()
+}),zod.null()])
+})
+
+
+/**
+ * @summary List version-bound semantic proposals for one operation
+ */
+export const ListSemanticProposalsParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const listSemanticProposalsResponseProposalTextMax = 500;
+
+export const listSemanticProposalsResponseConfidenceMin = 0;
+export const listSemanticProposalsResponseConfidenceMax = 1;
+
+export const listSemanticProposalsResponseUncertaintyMin = 0;
+export const listSemanticProposalsResponseUncertaintyMax = 1;
+
+export const listSemanticProposalsResponseSourceFieldMax = 40;
+
+
+
+export const ListSemanticProposalsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "workspaceId": zod.string().uuid(),
+  "apiId": zod.string().uuid(),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "proposalText": zod.string().min(1).max(listSemanticProposalsResponseProposalTextMax),
+  "proposalKind": zod.enum(['description']),
+  "confidence": zod.number().min(listSemanticProposalsResponseConfidenceMin).max(listSemanticProposalsResponseConfidenceMax),
+  "uncertainty": zod.number().min(listSemanticProposalsResponseUncertaintyMin).max(listSemanticProposalsResponseUncertaintyMax),
+  "sourceField": zod.string().max(listSemanticProposalsResponseSourceFieldMax),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
+  "createdAt": zod.coerce.date(),
+  "decidedAt": zod.coerce.date().nullable()
+})
+export const ListSemanticProposalsResponse = zod.array(ListSemanticProposalsResponseItem)
+
+
+/**
+ * Accepting stores a console overlay only; the source operation, MCP, and execution policy are unchanged.
+ * @summary Accept or reject a pending version-bound proposal
+ */
+export const DecideSemanticProposalParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "proposalId": zod.coerce.string().uuid()
+})
+
+export const DecideSemanticProposalBody = zod.object({
+  "decision": zod.enum(['accepted', 'rejected'])
+})
+
+export const decideSemanticProposalResponseProposalTextMax = 500;
+
+export const decideSemanticProposalResponseConfidenceMin = 0;
+export const decideSemanticProposalResponseConfidenceMax = 1;
+
+export const decideSemanticProposalResponseUncertaintyMin = 0;
+export const decideSemanticProposalResponseUncertaintyMax = 1;
+
+export const decideSemanticProposalResponseSourceFieldMax = 40;
+
+
+
+export const DecideSemanticProposalResponse = zod.object({
+  "id": zod.string().uuid(),
+  "workspaceId": zod.string().uuid(),
+  "apiId": zod.string().uuid(),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "proposalText": zod.string().min(1).max(decideSemanticProposalResponseProposalTextMax),
+  "proposalKind": zod.enum(['description']),
+  "confidence": zod.number().min(decideSemanticProposalResponseConfidenceMin).max(decideSemanticProposalResponseConfidenceMax),
+  "uncertainty": zod.number().min(decideSemanticProposalResponseUncertaintyMin).max(decideSemanticProposalResponseUncertaintyMax),
+  "sourceField": zod.string().max(decideSemanticProposalResponseSourceFieldMax),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
+  "createdAt": zod.coerce.date(),
+  "decidedAt": zod.coerce.date().nullable()
+})
+
+
+/**
  * @summary List normalized API operations
  */
 export const ListOperationsParams = zod.object({

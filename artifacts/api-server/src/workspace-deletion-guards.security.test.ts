@@ -14,6 +14,7 @@ const liveChildren = [
   "api_operations", "operation_policies", "credential_metadata",
   "connector_actors", "connector_tokens", "execution_leases",
   "semantic_provider_configs",
+  "semantic_analysis_proposals",
 ];
 
 describe("production workspace deletion catalog gate", () => {
@@ -82,14 +83,14 @@ describe("production workspace deletion catalog gate", () => {
     expect(hasWorkspaceDeletionGuards(snapshot.constraints, snapshot.columns)).toBe(false);
   }
 
-  it("accepts the intended declarative schema, including all seven validated tenant FKs", () => {
+  it("accepts the intended declarative schema, including proposal safeguards", () => {
     const { constraints, columns } = fixture();
-    expect(constraints).toHaveLength(29);
-    expect(columns).toHaveLength(23);
+    expect(constraints).toHaveLength(34);
+    expect(columns).toHaveLength(25);
     expect(hasWorkspaceDeletionGuards(constraints, columns)).toBe(true);
     // An incomplete Stage 1 catalog or the known historical NOT VALID row
     // must fail closed, even though the complete in-memory fixture passes.
-    if (actualConstraints.length !== 29 || actualConstraints.some((row) => !row.validated)) {
+    if (actualConstraints.length !== 34 || actualConstraints.some((row) => !row.validated)) {
       expect(hasWorkspaceDeletionGuards(actualConstraints, actualColumns)).toBe(false);
     }
   });

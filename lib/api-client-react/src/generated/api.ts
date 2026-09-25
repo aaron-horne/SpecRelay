@@ -40,6 +40,9 @@ import type {
   NotFoundResponse,
   OperationStateUpdate,
   RevokeConnector200,
+  SemanticAnalysisProposal,
+  SemanticAnalysisResult,
+  SemanticProposalDecision,
   SemanticProviderDeleteResult,
   SemanticProviderKeyInput,
   SemanticProviderMetadata,
@@ -2041,6 +2044,266 @@ export const useTestSemanticProvider = <TError = ErrorType<ErrorResponse | NotFo
         TContext
       > => {
       return useMutation(getTestSemanticProviderMutationOptions(options));
+    }
+
+export const getAnalyzeApiOperationUrl = (workspaceId: string,
+    apiId: string,
+    operationId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/operations/${operationId}/semantic-analysis`
+}
+
+/**
+ * OWNER-only, same-origin, explicit one-operation analysis. Sends only a bounded, redacted operation description to Jev. Jev selects among deterministic source-text candidates or abstains; it does not generate prose, execute operations, alter MCP, or modify the imported operation.
+ * @summary Manually analyze one imported operation with Jev
+ */
+export const analyzeApiOperation = async (workspaceId: string,
+    apiId: string,
+    operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisResult> => {
+
+  return customFetch<SemanticAnalysisResult>(getAnalyzeApiOperationUrl(workspaceId,apiId,operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAnalyzeApiOperationMutationKey = () => ['analyzeApiOperation'] as const;
+
+export const getAnalyzeApiOperationMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeApiOperation>>, TError,AnalyzeApiOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeApiOperation>>, TError,AnalyzeApiOperationMutationVariables, TContext> => {
+
+const mutationKey = getAnalyzeApiOperationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeApiOperation>>, AnalyzeApiOperationMutationVariables> = (props) => {
+          const {workspaceId,apiId,operationId} = props ?? {};
+
+          return  analyzeApiOperation(workspaceId,apiId,operationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeApiOperationMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeApiOperation>>>
+
+    export type AnalyzeApiOperationMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type AnalyzeApiOperationMutationVariables = {workspaceId: string;apiId: string;operationId: string}
+
+    /**
+ * @summary Manually analyze one imported operation with Jev
+ */
+export const useAnalyzeApiOperation = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeApiOperation>>, TError,AnalyzeApiOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeApiOperation>>,
+        TError,
+        AnalyzeApiOperationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAnalyzeApiOperationMutationOptions(options));
+    }
+
+export const getListSemanticProposalsUrl = (workspaceId: string,
+    apiId: string,
+    operationId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/operations/${operationId}/semantic-proposals`
+}
+
+/**
+ * @summary List version-bound semantic proposals for one operation
+ */
+export const listSemanticProposals = async (workspaceId: string,
+    apiId: string,
+    operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisProposal[]> => {
+
+  return customFetch<SemanticAnalysisProposal[]>(getListSemanticProposalsUrl(workspaceId,apiId,operationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSemanticProposalsQueryKey = (workspaceId: string,
+    apiId: string,
+    operationId: string,) => {
+    return [
+    `/api/workspaces/${workspaceId}/apis/${apiId}/operations/${operationId}/semantic-proposals`
+    ] as const;
+    }
+
+
+export const getListSemanticProposalsQueryOptions = <TData = Awaited<ReturnType<typeof listSemanticProposals>>, TError = ErrorType<ErrorResponse | NotFoundResponse>>(workspaceId: string,
+    apiId: string,
+    operationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSemanticProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSemanticProposalsQueryKey(workspaceId,apiId,operationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSemanticProposals>>> = ({ signal }) => listSemanticProposals(workspaceId,apiId,operationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined && apiId !== null && apiId !== undefined && operationId !== null && operationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSemanticProposals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSemanticProposalsQueryResult = NonNullable<Awaited<ReturnType<typeof listSemanticProposals>>>
+export type ListSemanticProposalsQueryError = ErrorType<ErrorResponse | NotFoundResponse>
+
+
+/**
+ * @summary List version-bound semantic proposals for one operation
+ */
+
+export function useListSemanticProposals<TData = Awaited<ReturnType<typeof listSemanticProposals>>, TError = ErrorType<ErrorResponse | NotFoundResponse>>(
+ workspaceId: string,
+    apiId: string,
+    operationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSemanticProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSemanticProposalsQueryOptions(workspaceId,apiId,operationId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideSemanticProposalUrl = (workspaceId: string,
+    apiId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/semantic-proposals/${proposalId}`
+}
+
+/**
+ * Accepting stores a console overlay only; the source operation, MCP, and execution policy are unchanged.
+ * @summary Accept or reject a pending version-bound proposal
+ */
+export const decideSemanticProposal = async (workspaceId: string,
+    apiId: string,
+    proposalId: string,
+    semanticProposalDecision: SemanticProposalDecision, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisProposal> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticAnalysisProposal>(getDecideSemanticProposalUrl(workspaceId,apiId,proposalId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticProposalDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideSemanticProposalMutationKey = () => ['decideSemanticProposal'] as const;
+
+export const getDecideSemanticProposalMutationOptions = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideSemanticProposal>>, TError,DecideSemanticProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideSemanticProposal>>, TError,DecideSemanticProposalMutationVariables, TContext> => {
+
+const mutationKey = getDecideSemanticProposalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideSemanticProposal>>, DecideSemanticProposalMutationVariables> = (props) => {
+          const {workspaceId,apiId,proposalId,data} = props ?? {};
+
+          return  decideSemanticProposal(workspaceId,apiId,proposalId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideSemanticProposalMutationResult = NonNullable<Awaited<ReturnType<typeof decideSemanticProposal>>>
+    export type DecideSemanticProposalMutationBody = BodyType<SemanticProposalDecision>
+    export type DecideSemanticProposalMutationError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>
+    export type DecideSemanticProposalMutationVariables = {workspaceId: string;apiId: string;proposalId: string;data: BodyType<SemanticProposalDecision>}
+
+    /**
+ * @summary Accept or reject a pending version-bound proposal
+ */
+export const useDecideSemanticProposal = <TError = ErrorType<BadRequestResponse | ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideSemanticProposal>>, TError,DecideSemanticProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideSemanticProposal>>,
+        TError,
+        DecideSemanticProposalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDecideSemanticProposalMutationOptions(options));
     }
 
 export const getListOperationsUrl = (workspaceId: string,

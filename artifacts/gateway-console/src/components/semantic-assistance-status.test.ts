@@ -23,7 +23,7 @@ describe("Phase 1A semantic assistance status", () => {
   })
 
   it("states that readiness never activates analysis or automatic egress in Phase 1A", () => {
-    expect(PHASE_1A_DESCRIPTION).toMatch(/future-phase readiness preference/)
-    expect(PHASE_1A_DESCRIPTION).toMatch(/No semantic analysis or automatic Jev calls are active/)
+    expect(PHASE_1A_DESCRIPTION).toMatch(/Ready permits a workspace owner to request analysis explicitly/)
+    expect(PHASE_1A_DESCRIPTION).toMatch(/never starts automatic analysis or provider calls/)
   })
 })

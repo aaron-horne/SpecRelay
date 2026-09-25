@@ -121,7 +121,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
   const handleToggleReady = (enabled: boolean) => {
     setReady.mutate({ workspaceId, data: { enabled } }, {
       onSuccess: () => {
-        toast({ title: enabled ? "Future readiness saved" : "Future readiness cleared", description: "No semantic analysis or automatic Jev calls are active in Phase 1A." })
+        toast({ title: enabled ? "Ready enabled" : "Ready disabled", description: "Ready never starts analysis. Only an explicit owner request on an operation page contacts the provider." })
         queryClient.invalidateQueries({ queryKey: getGetSemanticProviderQueryKey(workspaceId) })
       },
       onError: () => {
@@ -154,7 +154,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
     statusLabel = "Key unavailable"
     badgeVariant = "destructive"
   } else if (provider.enabled && provider.rolloutEnabled) {
-    statusLabel = "Ready for future phase"
+    statusLabel = "Ready"
     badgeVariant = "default"
   } else if (provider.configured) {
     statusLabel = "Configured"
@@ -209,7 +209,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
                   <DialogHeader>
                     <DialogTitle>Delete Credential</DialogTitle>
                     <DialogDescription>
-                      Are you sure you want to remove the Jev key? This removes its Ready state. Semantic analysis is not active.
+                      Are you sure you want to remove the Jev key? This removes its Ready state and prevents new manual analysis requests.
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>
@@ -279,7 +279,7 @@ export function SemanticAssistance({ workspaceId }: { workspaceId: string }) {
                 size="sm"
                 data-testid="button-toggle-semantic"
               >
-                {setReady.isPending ? "Updating..." : provider.enabled ? "Clear future readiness" : "Save future readiness"}
+                {setReady.isPending ? "Updating..." : provider.enabled ? "Turn off Ready" : "Mark Ready"}
               </Button>
             </div>
           </div>

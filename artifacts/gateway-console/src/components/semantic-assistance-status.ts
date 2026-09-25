@@ -1,5 +1,5 @@
 export const PHASE_1A_DESCRIPTION =
-  "Phase 1A stores a Jev key and future-phase readiness preference only. No semantic analysis or automatic Jev calls are active. Only an explicit, eligible connection test contacts Jev."
+  "Configure and test the Jev connection here. Ready permits a workspace owner to request analysis explicitly from an operation page; it never starts automatic analysis or provider calls."
 
 export function testCooldownSeconds(testCooldownUntil: string | null, now: number): number {
   const end = testCooldownUntil ? new Date(testCooldownUntil).getTime() : NaN
