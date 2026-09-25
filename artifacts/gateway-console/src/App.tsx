@@ -15,6 +15,9 @@ import WorkspaceDetailPage from "@/pages/workspace-detail";
 import ApiDetailPage from "@/pages/api-detail";
 import OperationDetailPage from "@/pages/operation-detail";
 import ExecutionLogsPage from "@/pages/execution-logs";
+import HowItWorksPage from "@/pages/how-it-works";
+import FaqPage from "@/pages/faq";
+import { FAQ_PATH, HOW_IT_WORKS_PATH } from "@/guide-routes";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -121,6 +124,8 @@ function ProtectedConsole() {
               <Route path="/workspaces/:workspaceId/apis/:apiId" component={ApiDetailPage} />
               <Route path="/workspaces/:workspaceId/apis/:apiId/operations/:operationId" component={OperationDetailPage} />
               <Route path="/execution-logs" component={ExecutionLogsPage} />
+              <Route path={HOW_IT_WORKS_PATH} component={HowItWorksPage} />
+              <Route path={FAQ_PATH} component={FaqPage} />
               <Route component={NotFound} />
             </Switch>
           </RoutedErrorBoundary>

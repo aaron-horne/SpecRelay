@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter"
-import { Database, LayoutGrid, Activity, HardDrive } from "lucide-react"
+import { Database, LayoutGrid, Activity, HardDrive, BookOpen, CircleHelp } from "lucide-react"
 import { Logo } from "@/components/ui/logo"
+import { FAQ_PATH, HOW_IT_WORKS_PATH } from "@/guide-routes"
 
 export function Shell({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   const [location] = useLocation()
@@ -15,9 +16,10 @@ export function Shell({ children, actions }: { children: React.ReactNode; action
           <div className="text-xs font-medium uppercase tracking-wider text-sidebar-foreground/70 mb-3 px-2">Navigation</div>
           <nav className="space-y-1">
             <Link
-              href="/"
+              href="/console"
+              data-testid="link-workspaces"
               className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                location === "/" || location.startsWith("/workspaces")
+                location === "/console" || location.startsWith("/workspaces")
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "hover:bg-sidebar-accent/50"
               }`}
@@ -40,6 +42,31 @@ export function Shell({ children, actions }: { children: React.ReactNode; action
             >
               <Activity className="w-4 h-4 mr-3" />
               Execution Logs
+            </Link>
+          </nav>
+          <div className="mt-8 mb-3 px-2 text-xs font-medium uppercase tracking-wider text-sidebar-foreground/70">Learn</div>
+          <nav aria-label="Learn" className="space-y-1">
+            <Link
+              href={HOW_IT_WORKS_PATH}
+              data-testid="link-how-it-works"
+              aria-current={location === HOW_IT_WORKS_PATH ? "page" : undefined}
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                location === HOW_IT_WORKS_PATH ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/50"
+              }`}
+            >
+              <BookOpen className="w-4 h-4 mr-3" aria-hidden="true" />
+              How It Works
+            </Link>
+            <Link
+              href={FAQ_PATH}
+              data-testid="link-faq"
+              aria-current={location === FAQ_PATH ? "page" : undefined}
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                location === FAQ_PATH ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/50"
+              }`}
+            >
+              <CircleHelp className="w-4 h-4 mr-3" aria-hidden="true" />
+              FAQ
             </Link>
           </nav>
         </div>

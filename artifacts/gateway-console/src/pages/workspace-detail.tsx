@@ -12,7 +12,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { 
   Plus, 
-  FileCode2, 
   Activity, 
   ShieldCheck, 
   ShieldAlert, 
@@ -43,6 +42,7 @@ import { useState } from "react"
 import { ConnectorTokens } from "@/components/connector-tokens"
 import { DeleteWorkspaceDialog } from "@/components/delete-workspace-dialog"
 import { SemanticAssistance } from "@/components/semantic-assistance"
+import { FirstApiPath } from "@/components/first-api-path"
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
@@ -218,9 +218,11 @@ export default function WorkspaceDetailPage() {
           </CardHeader>
           <CardContent>
             {!apis?.length ? (
-              <div className="text-center p-6 border border-dashed rounded-md bg-muted/50">
-                <FileCode2 className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                <p className="text-sm text-muted-foreground">No APIs registered yet.</p>
+              <div className="rounded-md border border-dashed bg-muted/30 p-5 text-center" data-testid="empty-workspace-apis">
+                <FirstApiPath action={overview.canManage ? (
+                  <Button size="sm" onClick={() => setOpen(true)} data-testid="button-first-api">Add your first API</Button>
+                ) : undefined} />
+                {!overview.canManage && <p className="mt-3 text-xs text-muted-foreground">Ask a workspace OWNER to add the first API.</p>}
               </div>
             ) : (
               <Table>

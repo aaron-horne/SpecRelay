@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useToast } from "@/hooks/use-toast"
+import { FirstApiPath } from "@/components/first-api-path"
 import { useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -162,15 +163,12 @@ export default function WorkspacesPage() {
         </div>
       ) : !workspaces?.length ? (
         <Card className="border-dashed bg-transparent shadow-none">
-          <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-              <LayoutGrid className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold">No workspaces found</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm">
-              Create a workspace, then import an OpenAPI document.
-            </p>
-            <Button onClick={() => setOpen(true)} variant="outline">Create your first workspace</Button>
+          <CardContent className="p-6 text-center sm:p-10">
+            <FirstApiPath action={
+              <Button onClick={() => setOpen(true)} data-testid="button-first-workspace">
+                Create your first workspace
+              </Button>
+            } />
           </CardContent>
         </Card>
       ) : (
