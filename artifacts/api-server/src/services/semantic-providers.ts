@@ -18,6 +18,7 @@ import {
   type SemanticProviderTestOutcome,
 } from "./semantic-provider-adapters";
 import { ServiceError } from "./errors";
+import { staleMcpPublications } from "./semantic-mcp-publication";
 
 const PROVIDER = "jev";
 const TEST_COOLDOWN_MS = 30_000;
@@ -369,6 +370,7 @@ export class SemanticProviderService {
       if (!row) {
         throw new ServiceError("Provider key changed concurrently; retry the request", 409, "SEMANTIC_PROVIDER_REVISION_CONFLICT");
       }
+      if (existing) await staleMcpPublications(tx, workspaceId, actorId, "credential_replaced");
       await tx.insert(auditEventsTable).values({
         workspaceId,
         eventType: existing ? "semantic_provider.key_replaced" : "semantic_provider.key_configured",
@@ -397,6 +399,7 @@ export class SemanticProviderService {
         ))
         .returning();
       if (row) {
+        await staleMcpPublications(tx, workspaceId, actorId, "credential_deleted");
         await tx.insert(auditEventsTable).values({
           workspaceId,
           eventType: "semantic_provider.key_deleted",
@@ -513,6 +516,7 @@ export class SemanticProviderService {
       if (!row) {
         throw new ServiceError("Provider key changed concurrently; retry the request", 409, "SEMANTIC_PROVIDER_REVISION_CONFLICT");
       }
+      if (!enabled) await staleMcpPublications(tx, workspaceId, actorId, "provider_disabled");
       await tx.insert(auditEventsTable).values({
         workspaceId,
         eventType: enabled ? "semantic_provider.enabled" : "semantic_provider.disabled",
@@ -628,6 +632,7 @@ export class SemanticProviderService {
           "SEMANTIC_PROVIDER_REVISION_CONFLICT",
         );
       }
+      if (outcome !== "success") await staleMcpPublications(tx, workspaceId, actorId, "provider_test_failed");
       await tx.insert(auditEventsTable).values({
         workspaceId,
         eventType: "semantic_provider.tested",

@@ -19,6 +19,7 @@ import {
 } from "@workspace/openapi";
 import { ServiceError } from "./errors";
 import { mapApiSource, mapOperation, mapSpecification } from "./mappers";
+import { staleMcpPublications } from "./semantic-mcp-publication";
 
 const adapter = new SecureOpenApiAdapter();
 
@@ -143,6 +144,7 @@ export class CatalogService {
     workspaceId: string,
     apiId: string,
     document: string,
+    actorId = "system:import",
   ) {
     await this.requireApi(workspaceId, apiId);
     const parsed = adapter.parseAndNormalize(document);
@@ -283,6 +285,7 @@ export class CatalogService {
         );
       }
 
+      await staleMcpPublications(tx, workspaceId, actorId, "specification_reimported", apiId);
       const staleProposals = await tx
         .update(semanticAnalysisProposalsTable)
         .set({ status: "stale", decidedAt: new Date() })

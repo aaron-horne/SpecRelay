@@ -446,6 +446,19 @@ export interface SemanticAnalysisProposal {
   createdAt: string;
   /** @nullable */
   decidedAt: string | null;
+  /** @nullable */
+  mcpPublishedAt: string | null;
+}
+
+export interface SemanticMcpPublicationInput {
+  previewToken: string;
+}
+
+export interface SemanticMcpPublicationPreview {
+  importedDescription: string;
+  proposalText: string;
+  toolDescription: string;
+  previewToken: string;
 }
 
 export type SemanticAnalysisResultOutcome = typeof SemanticAnalysisResultOutcome[keyof typeof SemanticAnalysisResultOutcome];

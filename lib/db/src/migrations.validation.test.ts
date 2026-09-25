@@ -35,6 +35,8 @@ const migrationNames = [
   "0020_semantic_analysis_dispatch_token_kinds.sql",
   "0021_semantic_denial_dispatch_category.sql",
   "0022_preflight_publishable_live_guard.sql",
+  "0023_semantic_mcp_publication.sql",
+  "0024_semantic_mcp_preview_grant.sql",
 ];
 
 function forSchema(sql: string, schema: string): string {

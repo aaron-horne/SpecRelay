@@ -62,6 +62,8 @@ export * from './semanticAnalysisProposalProposalKind';
 export * from './semanticAnalysisProposalStatus';
 export * from './semanticAnalysisResult';
 export * from './semanticAnalysisResultOutcome';
+export * from './semanticMcpPublicationInput';
+export * from './semanticMcpPublicationPreview';
 export * from './semanticProposalDecision';
 export * from './semanticProposalDecisionDecision';
 export * from './semanticProviderDeleteResult';

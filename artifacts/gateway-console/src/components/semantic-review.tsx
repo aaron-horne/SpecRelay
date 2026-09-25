@@ -9,11 +9,15 @@ import {
   useDecideSemanticProposal,
   useGetSemanticProvider,
   useListSemanticProposals,
+  usePreviewSemanticMcpPublication,
+  usePublishSemanticMcpDescription,
+  useRevokeSemanticMcpDescription,
   type ApiOperation,
   type SemanticAnalysisProposal,
-  type SemanticAnalysisResult
+  type SemanticAnalysisResult,
+  type SemanticMcpPublicationPreview
 } from "@workspace/api-client-react"
-import { ArrowRight, Check, FileText, Info, RefreshCw, Sparkles, X } from "lucide-react"
+import { ArrowRight, Check, FileText, Info, RefreshCw, Sparkles, X, Radio, RotateCcw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,7 +38,7 @@ export const SEMANTIC_REVIEW_PRIVACY_COPY =
 function errorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object") {
     const value = error as { status?: number; message?: string; data?: { error?: string } }
-    if (value.status === 403) return "The server denied this action. Only workspace owners can review semantic proposals."
+    if (value.status === 403) return "The server denied this action. Only workspace owners can manage semantic descriptions."
     if (value.status === 409) return value.data?.error || "This proposal is no longer pending or belongs to a previous specification. Refresh the review."
     return value.data?.error || value.message || fallback
   }
@@ -78,6 +82,143 @@ const statusStyle: Record<SemanticAnalysisProposal["status"], string> = {
   accepted: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
   rejected: "border-border bg-muted text-muted-foreground",
   stale: "border-border bg-muted text-muted-foreground"
+}
+
+function McpPublication({ workspaceId, apiId, proposal, displayedProposalId, canManage }: {
+  workspaceId: string
+  apiId: string
+  proposal: SemanticAnalysisProposal
+  displayedProposalId: string
+  canManage: boolean
+}) {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  const [preview, setPreview] = useState<SemanticMcpPublicationPreview | null>(null)
+  const [revokeOpen, setRevokeOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const previewRequest = usePreviewSemanticMcpPublication()
+  const publish = usePublishSemanticMcpDescription()
+  const revoke = useRevokeSemanticMcpDescription()
+  const busy = previewRequest.isPending || publish.isPending || revoke.isPending
+
+  function handlePreview() {
+    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || busy) return
+    setPreview(null)
+    setError(null)
+    previewRequest.mutate({ workspaceId, apiId, proposalId: proposal.id }, {
+      onSuccess: (response) => setPreview(response),
+      onError: (cause) => setError(errorMessage(cause, "The MCP publication preview could not be prepared. Nothing was published."))
+    })
+  }
+
+  function handlePublish() {
+    if (!canManage || proposal.status !== "accepted" || proposal.mcpPublishedAt || !preview || busy) return
+    setError(null)
+    publish.mutate({ workspaceId, apiId, proposalId: proposal.id, data: { previewToken: preview.previewToken } }, {
+      onSuccess: () => {
+        setPreview(null)
+        void queryClient.invalidateQueries({ queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, proposal.operationId) })
+        toast({ title: "Description published to MCP", description: "The accepted description is now used in MCP tools/list. The imported specification remains unchanged." })
+      },
+      onError: (cause) => {
+        setPreview(null)
+        void queryClient.invalidateQueries({ queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, proposal.operationId) })
+        setError(errorMessage(cause, "Publication could not be completed. Request a fresh preview before trying again."))
+      }
+    })
+  }
+
+  function handleRevoke() {
+    if (!canManage || proposal.status !== "accepted" || !proposal.mcpPublishedAt || busy) return
+    setError(null)
+    revoke.mutate({ workspaceId, apiId, proposalId: proposal.id }, {
+      onSuccess: () => {
+        setRevokeOpen(false)
+        void queryClient.invalidateQueries({ queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, proposal.operationId) })
+        toast({ title: "MCP publication revoked", description: "MCP tools/list no longer uses this accepted description. Console acceptance remains unchanged." })
+      },
+      onError: (cause) => {
+        setRevokeOpen(false)
+        void queryClient.invalidateQueries({ queryKey: getListSemanticProposalsQueryKey(workspaceId, apiId, proposal.operationId) })
+        setError(errorMessage(cause, "The MCP publication could not be revoked. Refresh proposals before trying again."))
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-3 border-t border-border/70 pt-4" data-testid="section-semantic-mcp-publication">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
+            <Radio className="h-4 w-4" aria-hidden="true" /> MCP publication
+          </p>
+          <p className="text-xs text-muted-foreground" data-testid="status-semantic-mcp-publication">
+            {proposal.mcpPublishedAt ? `Published ${dateLabel(proposal.mcpPublishedAt)} · MCP tools/list uses this description.` : "Not published · MCP tools/list continues to use the imported description."}
+          </p>
+          {proposal.mcpPublishedAt && proposal.id !== displayedProposalId && (
+            <div className="space-y-1 rounded-md border border-primary/25 bg-background/40 p-3">
+              <p className="text-xs text-muted-foreground">A different accepted proposal is published to MCP. Revoke it here before publishing the accepted console description above.</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed" data-testid="text-published-mcp-proposal">{proposal.proposalText}</p>
+            </div>
+          )}
+        </div>
+        {canManage && (proposal.mcpPublishedAt ? (
+          <Button size="sm" variant="outline" onClick={() => setRevokeOpen(true)} disabled={busy} data-testid="button-revoke-semantic-mcp-description">
+            <RotateCcw className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Revoke MCP publication
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={handlePreview} disabled={busy} data-testid="button-preview-semantic-mcp-publication">
+            <Radio className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            {previewRequest.isPending ? "Preparing MCP preview..." : "Publish this accepted description to MCP"}
+          </Button>
+        ))}
+      </div>
+      {previewRequest.isPending && <div aria-label="Preparing MCP publication preview" className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-12 w-full" /></div>}
+      {error && <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive" data-testid="status-semantic-mcp-error">{error}</div>}
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open && !publish.isPending) setPreview(null) }}>
+        <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden" data-testid="dialog-semantic-mcp-preview">
+          <DialogHeader>
+            <DialogTitle>Publish this description to MCP?</DialogTitle>
+            <DialogDescription>Review the exact imported description, accepted proposal, and resulting MCP tool description. Publishing is separate from console acceptance and does not edit the imported specification.</DialogDescription>
+          </DialogHeader>
+          {preview && (
+            <div className="min-h-0 space-y-4 overflow-y-auto">
+              {([
+                ["Imported description", preview.importedDescription, "text-mcp-imported-description"],
+                ["Accepted proposal", preview.proposalText, "text-mcp-proposal-description"],
+                ["MCP tool description after publication", preview.toolDescription, "text-mcp-tool-description"]
+              ] as const).map(([label, value, testId]) => (
+                <div key={testId} className="space-y-2 rounded-md border border-border bg-background/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+                  <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed" data-testid={testId}>{value}</pre>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPreview(null)} disabled={publish.isPending} data-testid="button-cancel-semantic-mcp-publication">Cancel</Button>
+            <Button onClick={handlePublish} disabled={!preview || !canManage || busy} data-testid="button-confirm-semantic-mcp-publication">
+              {publish.isPending ? "Publishing..." : "Confirm publish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={revokeOpen} onOpenChange={(open) => { if (!revoke.isPending) setRevokeOpen(open) }}>
+        <DialogContent data-testid="dialog-revoke-semantic-mcp-description">
+          <DialogHeader>
+            <DialogTitle>Revoke this MCP publication?</DialogTitle>
+            <DialogDescription>MCP tools/list will return to the imported description. This does not remove the accepted console description or change the imported specification.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRevokeOpen(false)} disabled={revoke.isPending} data-testid="button-cancel-revoke-semantic-mcp-description">Cancel</Button>
+            <Button onClick={handleRevoke} disabled={!canManage || !proposal.mcpPublishedAt || busy} data-testid="button-confirm-revoke-semantic-mcp-description">
+              {revoke.isPending ? "Revoking..." : "Confirm revoke"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }
 
 export function SemanticReview({ workspaceId, apiId, operation, canManage }: Props) {
@@ -145,6 +286,10 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
     current[0] ?? proposals[0]
   const accepted = current.filter((item) => item.status === "accepted")
     .sort((a, b) => (b.decidedAt || "").localeCompare(a.decidedAt || ""))[0]
+  // A publication may belong to an older accepted proposal, not the one shown in the console.
+  // Keep its revoke action reachable; do not offer another publication until it is revoked.
+  const published = current.find((item) => item.status === "accepted" && item.mcpPublishedAt)
+  const publicationProposal = published ?? accepted
   const ready = Boolean(providerQuery.data?.enabled && providerQuery.data?.rolloutEnabled && providerQuery.data?.credentialUsable)
   const canDecide = canManage && selected?.status === "pending" &&
     selected.specificationId === operation.specificationId && selected.operationId === operation.id
@@ -350,12 +495,13 @@ export function SemanticReview({ workspaceId, apiId, operation, canManage }: Pro
               {accepted ? (
                 <>
                   <p className="whitespace-pre-wrap break-words text-sm leading-relaxed" data-testid="text-accepted-description">{accepted.proposalText}</p>
-                  <p className="text-xs text-muted-foreground">Accepted {dateLabel(accepted.decidedAt)} · Displayed in this console only.</p>
+                  <p className="text-xs text-muted-foreground">Accepted {dateLabel(accepted.decidedAt)} · {accepted.mcpPublishedAt ? "Also published to MCP tools/list." : "Displayed in this console only."}</p>
                 </>
               ) : (
                 <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-accepted-description-empty">No accepted description for this specification. The imported source remains the only description.</p>
               )}
-              <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">Acceptance does not edit the OpenAPI document or change MCP tool descriptions or execution.</p>
+              <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">Acceptance alone does not edit the OpenAPI document or change MCP tool descriptions or execution. MCP publication requires a separate owner confirmation.</p>
+              {publicationProposal && <McpPublication key={`${workspaceId}:${apiId}:${operation.id}:${operation.specificationId}:${publicationProposal.id}`} workspaceId={workspaceId} apiId={apiId} proposal={publicationProposal} displayedProposalId={accepted?.id ?? publicationProposal.id} canManage={canManage} />}
             </div>
           </div>
 

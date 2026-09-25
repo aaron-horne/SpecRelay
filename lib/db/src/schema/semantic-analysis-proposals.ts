@@ -9,6 +9,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -47,11 +48,18 @@ export const semanticAnalysisProposalsTable = pgTable(
     createdBy: text("created_by").notNull(),
     decidedBy: text("decided_by"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
+    mcpPublishedAt: timestamp("mcp_published_at", { withTimezone: true }),
+    mcpPreviewTokenHash: text("mcp_preview_token_hash"),
+    mcpPreviewActorId: text("mcp_preview_actor_id"),
+    mcpPreviewExpiresAt: timestamp("mcp_preview_expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("semantic_analysis_proposals_workspace_api_idx").on(table.workspaceId, table.apiId, table.createdAt),
     index("semantic_analysis_proposals_operation_idx").on(table.workspaceId, table.operationId, table.createdAt),
+    uniqueIndex("semantic_analysis_proposals_one_mcp_publication_idx")
+      .on(table.workspaceId, table.specificationId, table.operationId)
+      .where(sql`${table.mcpPublishedAt} IS NOT NULL`),
     foreignKey({
       columns: [table.workspaceId, table.workspaceIsLive],
       foreignColumns: [workspacesTable.id, workspacesTable.isLive],
@@ -77,6 +85,9 @@ export const semanticAnalysisProposalsTable = pgTable(
     check("semantic_analysis_proposals_confidence_check", sql`${table.confidence} >= 0 AND ${table.confidence} <= 1`),
     check("semantic_analysis_proposals_uncertainty_check", sql`${table.uncertainty} >= 0 AND ${table.uncertainty} <= 1`),
     check("semantic_analysis_proposals_text_size_check", sql`length(${table.proposalText}) BETWEEN 1 AND 500`),
+    check("semantic_analysis_proposals_mcp_preview_check",
+      sql`(${table.mcpPreviewTokenHash} IS NULL AND ${table.mcpPreviewActorId} IS NULL AND ${table.mcpPreviewExpiresAt} IS NULL) OR
+          (${table.mcpPreviewTokenHash} IS NOT NULL AND ${table.mcpPreviewActorId} IS NOT NULL AND ${table.mcpPreviewExpiresAt} IS NOT NULL)`),
   ],
 );
 

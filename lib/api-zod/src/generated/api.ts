@@ -894,7 +894,8 @@ export const AnalyzeApiOperationResponse = zod.object({
   "sourceField": zod.string().max(analyzeApiOperationResponseProposalOneSourceFieldMax),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullable()
+  "decidedAt": zod.coerce.date().nullable(),
+  "mcpPublishedAt": zod.coerce.date().nullable()
 }),zod.null()])
 })
 
@@ -933,7 +934,8 @@ export const ListSemanticProposalsResponseItem = zod.object({
   "sourceField": zod.string().max(listSemanticProposalsResponseSourceFieldMax),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullable()
+  "decidedAt": zod.coerce.date().nullable(),
+  "mcpPublishedAt": zod.coerce.date().nullable()
 })
 export const ListSemanticProposalsResponse = zod.array(ListSemanticProposalsResponseItem)
 
@@ -977,7 +979,107 @@ export const DecideSemanticProposalResponse = zod.object({
   "sourceField": zod.string().max(decideSemanticProposalResponseSourceFieldMax),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullable()
+  "decidedAt": zod.coerce.date().nullable(),
+  "mcpPublishedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Explicitly publish an accepted description to MCP tools/list
+ */
+export const PublishSemanticMcpDescriptionParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "proposalId": zod.coerce.string().uuid()
+})
+
+export const PublishSemanticMcpDescriptionBody = zod.object({
+  "previewToken": zod.string().uuid()
+})
+
+export const publishSemanticMcpDescriptionResponseProposalTextMax = 500;
+
+export const publishSemanticMcpDescriptionResponseConfidenceMin = 0;
+export const publishSemanticMcpDescriptionResponseConfidenceMax = 1;
+
+export const publishSemanticMcpDescriptionResponseUncertaintyMin = 0;
+export const publishSemanticMcpDescriptionResponseUncertaintyMax = 1;
+
+export const publishSemanticMcpDescriptionResponseSourceFieldMax = 40;
+
+
+
+export const PublishSemanticMcpDescriptionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "workspaceId": zod.string().uuid(),
+  "apiId": zod.string().uuid(),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "proposalText": zod.string().min(1).max(publishSemanticMcpDescriptionResponseProposalTextMax),
+  "proposalKind": zod.enum(['description']),
+  "confidence": zod.number().min(publishSemanticMcpDescriptionResponseConfidenceMin).max(publishSemanticMcpDescriptionResponseConfidenceMax),
+  "uncertainty": zod.number().min(publishSemanticMcpDescriptionResponseUncertaintyMin).max(publishSemanticMcpDescriptionResponseUncertaintyMax),
+  "sourceField": zod.string().max(publishSemanticMcpDescriptionResponseSourceFieldMax),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
+  "createdAt": zod.coerce.date(),
+  "decidedAt": zod.coerce.date().nullable(),
+  "mcpPublishedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Revoke a previously published MCP description
+ */
+export const RevokeSemanticMcpDescriptionParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "proposalId": zod.coerce.string().uuid()
+})
+
+export const revokeSemanticMcpDescriptionResponseProposalTextMax = 500;
+
+export const revokeSemanticMcpDescriptionResponseConfidenceMin = 0;
+export const revokeSemanticMcpDescriptionResponseConfidenceMax = 1;
+
+export const revokeSemanticMcpDescriptionResponseUncertaintyMin = 0;
+export const revokeSemanticMcpDescriptionResponseUncertaintyMax = 1;
+
+export const revokeSemanticMcpDescriptionResponseSourceFieldMax = 40;
+
+
+
+export const RevokeSemanticMcpDescriptionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "workspaceId": zod.string().uuid(),
+  "apiId": zod.string().uuid(),
+  "specificationId": zod.string().uuid(),
+  "operationId": zod.string().uuid(),
+  "proposalText": zod.string().min(1).max(revokeSemanticMcpDescriptionResponseProposalTextMax),
+  "proposalKind": zod.enum(['description']),
+  "confidence": zod.number().min(revokeSemanticMcpDescriptionResponseConfidenceMin).max(revokeSemanticMcpDescriptionResponseConfidenceMax),
+  "uncertainty": zod.number().min(revokeSemanticMcpDescriptionResponseUncertaintyMin).max(revokeSemanticMcpDescriptionResponseUncertaintyMax),
+  "sourceField": zod.string().max(revokeSemanticMcpDescriptionResponseSourceFieldMax),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'stale']),
+  "createdAt": zod.coerce.date(),
+  "decidedAt": zod.coerce.date().nullable(),
+  "mcpPublishedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Preview a separately approved MCP description publication
+ */
+export const PreviewSemanticMcpPublicationParams = zod.object({
+  "workspaceId": zod.coerce.string().uuid(),
+  "apiId": zod.coerce.string().uuid(),
+  "proposalId": zod.coerce.string().uuid()
+})
+
+export const PreviewSemanticMcpPublicationResponse = zod.object({
+  "importedDescription": zod.string(),
+  "proposalText": zod.string(),
+  "toolDescription": zod.string(),
+  "previewToken": zod.string().uuid()
 })
 
 

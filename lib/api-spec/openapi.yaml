@@ -838,6 +838,101 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /workspaces/{workspaceId}/apis/{apiId}/semantic-proposals/{proposalId}/mcp-publication:
+    post:
+      operationId: publishSemanticMcpDescription
+      tags: [semantic-providers]
+      summary: Explicitly publish an accepted description to MCP tools/list
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/SemanticProposalId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SemanticMcpPublicationInput"
+      responses:
+        "200":
+          description: Publication recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticAnalysisProposal"
+        "403":
+          description: Workspace owner and same-origin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Proposal or publication is no longer current
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: revokeSemanticMcpDescription
+      tags: [semantic-providers]
+      summary: Revoke a previously published MCP description
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/SemanticProposalId"
+      responses:
+        "200":
+          description: Publication revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticAnalysisProposal"
+        "403":
+          description: Workspace owner and same-origin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Publication is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /workspaces/{workspaceId}/apis/{apiId}/semantic-proposals/{proposalId}/mcp-publication/preview:
+    post:
+      operationId: previewSemanticMcpPublication
+      tags: [semantic-providers]
+      summary: Preview a separately approved MCP description publication
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/ApiId"
+        - $ref: "#/components/parameters/SemanticProposalId"
+      responses:
+        "200":
+          description: Current imported description, proposal, and exact MCP description
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticMcpPublicationPreview"
+        "403":
+          description: Workspace owner and same-origin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Proposal or publication is no longer current
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /workspaces/{workspaceId}/apis/{apiId}/operations:
     get:
       operationId: listOperations
@@ -1482,7 +1577,23 @@ components:
         status: { type: string, enum: [pending, accepted, rejected, stale] }
         createdAt: { type: string, format: date-time }
         decidedAt: { type: ["string", "null"], format: date-time }
-      required: [id, workspaceId, apiId, specificationId, operationId, proposalText, proposalKind, confidence, uncertainty, sourceField, status, createdAt, decidedAt]
+        mcpPublishedAt: { type: ["string", "null"], format: date-time }
+      required: [id, workspaceId, apiId, specificationId, operationId, proposalText, proposalKind, confidence, uncertainty, sourceField, status, createdAt, decidedAt, mcpPublishedAt]
+      additionalProperties: false
+    SemanticMcpPublicationInput:
+      type: object
+      properties:
+        previewToken: { type: string, format: uuid }
+      required: [previewToken]
+      additionalProperties: false
+    SemanticMcpPublicationPreview:
+      type: object
+      properties:
+        importedDescription: { type: string }
+        proposalText: { type: string }
+        toolDescription: { type: string }
+        previewToken: { type: string, format: uuid }
+      required: [importedDescription, proposalText, toolDescription, previewToken]
       additionalProperties: false
     SemanticAnalysisResult:
       type: object

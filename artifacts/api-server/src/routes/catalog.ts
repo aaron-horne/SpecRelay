@@ -95,6 +95,7 @@ router.post(
       params.data.workspaceId,
       params.data.apiId,
       input.data.document,
+      actorId(req),
     );
     res.status(201).json(ImportSpecificationResponse.parse(result));
   },

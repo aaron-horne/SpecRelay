@@ -13,13 +13,22 @@ import {
   ListSemanticProposalsResponse,
   PrepareSemanticAnalysisParams,
   PrepareSemanticAnalysisResponse,
+  PreviewSemanticMcpPublicationParams,
+  PreviewSemanticMcpPublicationResponse,
+  PublishSemanticMcpDescriptionParams,
+  PublishSemanticMcpDescriptionBody,
+  PublishSemanticMcpDescriptionResponse,
+  RevokeSemanticMcpDescriptionParams,
+  RevokeSemanticMcpDescriptionResponse,
 } from "@workspace/api-zod";
 import { actorId, requireSameOrigin, requireWorkspaceMembership, requireWorkspaceOwner } from "../middlewares/auth";
 import { SemanticAnalysisService } from "../services/semantic-analysis";
 import { recordSemanticAnalysisDenial, semanticAnalysisRequestCategory } from "../services/semantic-analysis-denial-audit";
+import { SemanticMcpPublicationService } from "../services/semantic-mcp-publication";
 
 const router: IRouter = Router();
 const service = new SemanticAnalysisService();
+const publication = new SemanticMcpPublicationService();
 
 const base = "/workspaces/:workspaceId/apis/:apiId";
 
@@ -174,6 +183,58 @@ router.patch(
       input.data.decision,
     );
     res.json(DecideSemanticProposalResponse.parse(result));
+  },
+);
+
+router.post(
+  `${base}/semantic-proposals/:proposalId/mcp-publication/preview`,
+  requireWorkspaceOwner,
+  requireSameOrigin,
+  async (req, res): Promise<void> => {
+    const params = PreviewSemanticMcpPublicationParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: "Invalid publication target", code: "INVALID_INPUT" });
+      return;
+    }
+    const result = await publication.preview(
+      params.data.workspaceId, params.data.apiId, params.data.proposalId, actorId(req),
+    );
+    res.json(PreviewSemanticMcpPublicationResponse.parse(result));
+  },
+);
+
+router.post(
+  `${base}/semantic-proposals/:proposalId/mcp-publication`,
+  requireWorkspaceOwner,
+  requireSameOrigin,
+  async (req, res): Promise<void> => {
+    const params = PublishSemanticMcpDescriptionParams.safeParse(req.params);
+    const input = PublishSemanticMcpDescriptionBody.strict().safeParse(req.body);
+    if (!params.success || !input.success) {
+      res.status(400).json({ error: "Invalid publication confirmation", code: "INVALID_INPUT" });
+      return;
+    }
+    const result = await publication.publish(
+      params.data.workspaceId, params.data.apiId, params.data.proposalId, actorId(req), input.data.previewToken,
+    );
+    res.json(PublishSemanticMcpDescriptionResponse.parse(result));
+  },
+);
+
+router.delete(
+  `${base}/semantic-proposals/:proposalId/mcp-publication`,
+  requireWorkspaceOwner,
+  requireSameOrigin,
+  async (req, res): Promise<void> => {
+    const params = RevokeSemanticMcpDescriptionParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: "Invalid publication target", code: "INVALID_INPUT" });
+      return;
+    }
+    const result = await publication.revoke(
+      params.data.workspaceId, params.data.apiId, params.data.proposalId, actorId(req),
+    );
+    res.json(RevokeSemanticMcpDescriptionResponse.parse(result));
   },
 );
 

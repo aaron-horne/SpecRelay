@@ -37,7 +37,7 @@ function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function requireRollout(workspaceId: string): void {
+export function requireRollout(workspaceId: string): void {
   if (process.env.SEMANTIC_PROVIDERS_ENABLED !== "true") {
     throw new ServiceError("Jev analysis is disabled", 503, "SEMANTIC_PROVIDERS_DISABLED");
   }
@@ -48,7 +48,7 @@ function requireRollout(workspaceId: string): void {
   }
 }
 
-async function lockOwner(tx: Tx, workspaceId: string, actorId: string): Promise<void> {
+export async function lockOwner(tx: Tx, workspaceId: string, actorId: string): Promise<void> {
   const [workspace] = await tx.select({ id: workspacesTable.id }).from(workspacesTable)
     .where(and(eq(workspacesTable.id, workspaceId), eq(workspacesTable.isLive, true), isNull(workspacesTable.deletedAt)))
     .for("update").limit(1);
@@ -60,7 +60,7 @@ async function lockOwner(tx: Tx, workspaceId: string, actorId: string): Promise<
   if (membership.role !== "OWNER") throw new ServiceError("Workspace owner access required", 403, "OWNER_REQUIRED");
 }
 
-async function acquireApiLock(tx: Tx, workspaceId: string, apiId: string): Promise<void> {
+export async function acquireApiLock(tx: Tx, workspaceId: string, apiId: string): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${workspaceId}:${apiId}`}))`);
 }
 
@@ -102,7 +102,7 @@ type Prepared = {
   sources: Map<string, string>;
 };
 
-function operationInput(operation: OperationRow): Prepared {
+export function operationInput(operation: OperationRow): Prepared {
   if (operation.parameters.length > 6 || operation.responses.length > 4) {
     throw new ServiceError("Operation has too many descriptions to safely prepare", 400, "SEMANTIC_ANALYSIS_REDACTION_FAILED");
   }
@@ -153,7 +153,7 @@ function operationInput(operation: OperationRow): Prepared {
   return { input, candidates, sources };
 }
 
-async function currentSourceOperation(
+export async function currentSourceOperation(
   tx: Tx,
   workspaceId: string,
   apiId: string,
@@ -175,7 +175,7 @@ async function currentSourceOperation(
   return { specification, operation };
 }
 
-async function requireReadyCredential(tx: Tx, workspaceId: string) {
+export async function requireReadyCredential(tx: Tx, workspaceId: string) {
   requireRollout(workspaceId);
   const [row] = await tx.select().from(semanticProviderConfigsTable).where(and(
     eq(semanticProviderConfigsTable.workspaceId, workspaceId),
@@ -201,12 +201,13 @@ async function requireReadyCredential(tx: Tx, workspaceId: string) {
   return { row, secret };
 }
 
-function proposalView(row: ProposalRow) {
+export function proposalView(row: ProposalRow) {
   return {
     id: row.id, workspaceId: row.workspaceId, apiId: row.apiId, specificationId: row.specificationId,
     operationId: row.operationId, proposalText: row.proposalText, proposalKind: "description" as const,
     confidence: row.confidence, uncertainty: row.uncertainty, sourceField: row.sourceField,
     status: row.status, createdAt: row.createdAt, decidedAt: row.decidedAt,
+    mcpPublishedAt: row.mcpPublishedAt,
   };
 }
 
@@ -556,8 +557,19 @@ export class SemanticAnalysisService {
         active.sources.get(row.sourceField) !== row.proposalText
       ));
       for (const row of stale) {
-        await tx.update(semanticAnalysisProposalsTable).set({ status: "stale", decidedAt: new Date() })
+        await tx.update(semanticAnalysisProposalsTable).set({
+          status: "stale", decidedAt: new Date(),
+          mcpPublishedAt: null, mcpPreviewTokenHash: null, mcpPreviewActorId: null, mcpPreviewExpiresAt: null,
+        })
           .where(and(eq(semanticAnalysisProposalsTable.id, row.id), eq(semanticAnalysisProposalsTable.status, row.status)));
+        if (row.mcpPublishedAt) await tx.insert(auditEventsTable).values({
+          workspaceId, eventType: "semantic_mcp_overlay.stale",
+          resourceType: "semantic_analysis_proposal", resourceId: row.id,
+          metadata: {
+            actorId, apiId, specificationId: row.specificationId, operationId,
+            credentialRevision: row.credentialRevision, reason: "source_changed",
+          },
+        });
         await tx.insert(auditEventsTable).values({
           workspaceId, eventType: "semantic_analysis.proposal_stale", resourceType: "semantic_analysis_proposal",
           resourceId: row.id, metadata: { actorId, apiId, specificationId: row.specificationId, operationId },
@@ -594,8 +606,19 @@ export class SemanticAnalysisService {
         current.sources.get(proposal.sourceField) === proposal.proposalText;
       if (!sourceValid) {
         if (proposal.status !== "stale") {
-          await tx.update(semanticAnalysisProposalsTable).set({ status: "stale", decidedAt: new Date() })
+          await tx.update(semanticAnalysisProposalsTable).set({
+            status: "stale", decidedAt: new Date(),
+            mcpPublishedAt: null, mcpPreviewTokenHash: null, mcpPreviewActorId: null, mcpPreviewExpiresAt: null,
+          })
             .where(eq(semanticAnalysisProposalsTable.id, proposal.id));
+          if (proposal.mcpPublishedAt) await tx.insert(auditEventsTable).values({
+            workspaceId, eventType: "semantic_mcp_overlay.stale",
+            resourceType: "semantic_analysis_proposal", resourceId: proposal.id,
+            metadata: {
+              actorId, apiId, specificationId: proposal.specificationId, operationId: proposal.operationId,
+              credentialRevision: proposal.credentialRevision, reason: "source_changed",
+            },
+          });
           await tx.insert(auditEventsTable).values({
             workspaceId, eventType: "semantic_analysis.proposal_stale", resourceType: "semantic_analysis_proposal",
             resourceId: proposal.id, metadata: { actorId, apiId, specificationId: proposal.specificationId, operationId: proposal.operationId },

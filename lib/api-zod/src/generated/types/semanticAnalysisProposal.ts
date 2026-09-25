@@ -36,4 +36,6 @@ export interface SemanticAnalysisProposal {
   createdAt: Date;
   /** @nullable */
   decidedAt: Date | null;
+  /** @nullable */
+  mcpPublishedAt: Date | null;
 }

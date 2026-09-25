@@ -11,7 +11,6 @@ import {
 import {
   createMcpTool,
   mcpToolName,
-  type McpApprovedOperation,
   type McpToolDescriptor,
 } from "@workspace/mcp";
 import {
@@ -19,6 +18,8 @@ import {
   type OutboundRequestBroker,
 } from "@workspace/security";
 import { ServiceError } from "./errors";
+import { authenticationMode, operationView, securityGroupsFor } from "./mcp-operation-view";
+import { publishedMcpDescriptions } from "./semantic-mcp-publication";
 import { securityServices } from "./security";
 
 const LEASE_DURATION_MS = 30_000;
@@ -26,41 +27,6 @@ const lockKey = (workspaceId: string, apiId: string) => `${workspaceId}:${apiId}
 type LeaseClient = PoolClient;
 
 type ToolArguments = Readonly<Record<string, unknown>>;
-
-function operationView(
-  row: typeof apiOperationsTable.$inferSelect,
-  authentication?: McpApprovedOperation["authentication"],
-): McpApprovedOperation {
-  return {
-    id: row.id,
-    operationId: row.operationId,
-    displayName: row.displayName,
-    description: row.description,
-    parameters: row.parameters,
-    authentication,
-  };
-}
-
-function authenticationMode(
-  row: typeof apiOperationsTable.$inferSelect,
-  schemes: typeof apiSpecVersionsTable.$inferSelect.securitySchemes,
-): McpApprovedOperation["authentication"] {
-  const groups = securityGroupsFor(row);
-  if (groups.length === 0 || groups.some((group) => group.length === 0)) return "unauthenticated";
-  const names = new Set(groups[0]?.map((entry) => entry.scheme));
-  if (groups.length === 1 && names.size === 1) {
-    const scheme = schemes.find((item) => names.has(item.name));
-    if (scheme?.bearer) return "bearer";
-  }
-  return "api-key";
-}
-
-function securityGroupsFor(
-  operation: typeof apiOperationsTable.$inferSelect,
-): Array<Array<{ scheme: string; scopes: string[] }>> {
-  if (operation.securityGroups.length > 0) return operation.securityGroups;
-  return operation.securityRequirements.map((scheme) => [{ scheme, scopes: [] }]);
-}
 
 function isExecutableServer(url: string | undefined): boolean {
   if (!url) return false;
@@ -437,6 +403,7 @@ export class McpService {
       .select({
         operation: apiOperationsTable,
         importedAt: apiSpecVersionsTable.importedAt,
+        documentHash: apiSpecVersionsTable.documentHash,
         serverUrls: apiSpecVersionsTable.serverUrls,
         securitySchemes: apiSpecVersionsTable.securitySchemes,
         decision: operationPoliciesTable.decision,
@@ -464,8 +431,12 @@ export class McpService {
       if (!latest) latestSpecByApi.set(row.operation.apiId, row.operation.specificationId);
       if (latestSpecByApi.get(row.operation.apiId) === row.operation.specificationId) currentRows.push(row);
     }
-    const eligible = [];
-    for (const { operation, serverUrls, securitySchemes, approved, decision } of currentRows) {
+    const eligibleOperations: Array<{
+      operation: typeof apiOperationsTable.$inferSelect;
+      documentHash: string;
+      securitySchemes: typeof apiSpecVersionsTable.$inferSelect.securitySchemes;
+    }> = [];
+    for (const { operation, documentHash, serverUrls, securitySchemes, approved, decision } of currentRows) {
       if (
         !operation.enabled ||
         !approved ||
@@ -486,9 +457,16 @@ export class McpService {
           schemes: securitySchemes,
         }))) continue;
       }
-      eligible.push(createMcpTool(operationView(operation, authenticationMode(operation, securitySchemes))));
+      eligibleOperations.push({ operation, documentHash, securitySchemes });
     }
-    return eligible;
+    const descriptions = await publishedMcpDescriptions(workspaceId, eligibleOperations);
+    return eligibleOperations.map(({ operation, securitySchemes }) => {
+      const view = operationView(operation, authenticationMode(operation, securitySchemes));
+      return createMcpTool({
+        ...view,
+        description: descriptions.get(operation.id) ?? view.description,
+      });
+    });
   }
 
   async callTool(workspaceId: string, actorId: string, name: string, args: ToolArguments, authorizeDispatch?: () => Promise<boolean>) {

@@ -46,6 +46,8 @@ import type {
   SemanticAnalysisPreflightResponse,
   SemanticAnalysisProposal,
   SemanticAnalysisResult,
+  SemanticMcpPublicationInput,
+  SemanticMcpPublicationPreview,
   SemanticProposalDecision,
   SemanticProviderDeleteResult,
   SemanticProviderKeyInput,
@@ -2496,6 +2498,255 @@ export const useDecideSemanticProposal = <TError = ErrorType<BadRequestResponse 
         TContext
       > => {
       return useMutation(getDecideSemanticProposalMutationOptions(options));
+    }
+
+export const getPublishSemanticMcpDescriptionUrl = (workspaceId: string,
+    apiId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/semantic-proposals/${proposalId}/mcp-publication`
+}
+
+/**
+ * @summary Explicitly publish an accepted description to MCP tools/list
+ */
+export const publishSemanticMcpDescription = async (workspaceId: string,
+    apiId: string,
+    proposalId: string,
+    semanticMcpPublicationInput: SemanticMcpPublicationInput, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisProposal> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SemanticAnalysisProposal>(getPublishSemanticMcpDescriptionUrl(workspaceId,apiId,proposalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(semanticMcpPublicationInput)
+  }
+);}
+
+
+
+
+
+export const getPublishSemanticMcpDescriptionMutationKey = () => ['publishSemanticMcpDescription'] as const;
+
+export const getPublishSemanticMcpDescriptionMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishSemanticMcpDescription>>, TError,PublishSemanticMcpDescriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishSemanticMcpDescription>>, TError,PublishSemanticMcpDescriptionMutationVariables, TContext> => {
+
+const mutationKey = getPublishSemanticMcpDescriptionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishSemanticMcpDescription>>, PublishSemanticMcpDescriptionMutationVariables> = (props) => {
+          const {workspaceId,apiId,proposalId,data} = props ?? {};
+
+          return  publishSemanticMcpDescription(workspaceId,apiId,proposalId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishSemanticMcpDescriptionMutationResult = NonNullable<Awaited<ReturnType<typeof publishSemanticMcpDescription>>>
+    export type PublishSemanticMcpDescriptionMutationBody = BodyType<SemanticMcpPublicationInput>
+    export type PublishSemanticMcpDescriptionMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type PublishSemanticMcpDescriptionMutationVariables = {workspaceId: string;apiId: string;proposalId: string;data: BodyType<SemanticMcpPublicationInput>}
+
+    /**
+ * @summary Explicitly publish an accepted description to MCP tools/list
+ */
+export const usePublishSemanticMcpDescription = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishSemanticMcpDescription>>, TError,PublishSemanticMcpDescriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof publishSemanticMcpDescription>>,
+        TError,
+        PublishSemanticMcpDescriptionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPublishSemanticMcpDescriptionMutationOptions(options));
+    }
+
+export const getRevokeSemanticMcpDescriptionUrl = (workspaceId: string,
+    apiId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/semantic-proposals/${proposalId}/mcp-publication`
+}
+
+/**
+ * @summary Revoke a previously published MCP description
+ */
+export const revokeSemanticMcpDescription = async (workspaceId: string,
+    apiId: string,
+    proposalId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticAnalysisProposal> => {
+
+  return customFetch<SemanticAnalysisProposal>(getRevokeSemanticMcpDescriptionUrl(workspaceId,apiId,proposalId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeSemanticMcpDescriptionMutationKey = () => ['revokeSemanticMcpDescription'] as const;
+
+export const getRevokeSemanticMcpDescriptionMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeSemanticMcpDescription>>, TError,RevokeSemanticMcpDescriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeSemanticMcpDescription>>, TError,RevokeSemanticMcpDescriptionMutationVariables, TContext> => {
+
+const mutationKey = getRevokeSemanticMcpDescriptionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeSemanticMcpDescription>>, RevokeSemanticMcpDescriptionMutationVariables> = (props) => {
+          const {workspaceId,apiId,proposalId} = props ?? {};
+
+          return  revokeSemanticMcpDescription(workspaceId,apiId,proposalId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeSemanticMcpDescriptionMutationResult = NonNullable<Awaited<ReturnType<typeof revokeSemanticMcpDescription>>>
+
+    export type RevokeSemanticMcpDescriptionMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type RevokeSemanticMcpDescriptionMutationVariables = {workspaceId: string;apiId: string;proposalId: string}
+
+    /**
+ * @summary Revoke a previously published MCP description
+ */
+export const useRevokeSemanticMcpDescription = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeSemanticMcpDescription>>, TError,RevokeSemanticMcpDescriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeSemanticMcpDescription>>,
+        TError,
+        RevokeSemanticMcpDescriptionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeSemanticMcpDescriptionMutationOptions(options));
+    }
+
+export const getPreviewSemanticMcpPublicationUrl = (workspaceId: string,
+    apiId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/api/workspaces/${workspaceId}/apis/${apiId}/semantic-proposals/${proposalId}/mcp-publication/preview`
+}
+
+/**
+ * @summary Preview a separately approved MCP description publication
+ */
+export const previewSemanticMcpPublication = async (workspaceId: string,
+    apiId: string,
+    proposalId: string, options?: Parameters<typeof customFetch>[1]): Promise<SemanticMcpPublicationPreview> => {
+
+  return customFetch<SemanticMcpPublicationPreview>(getPreviewSemanticMcpPublicationUrl(workspaceId,apiId,proposalId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewSemanticMcpPublicationMutationKey = () => ['previewSemanticMcpPublication'] as const;
+
+export const getPreviewSemanticMcpPublicationMutationOptions = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSemanticMcpPublication>>, TError,PreviewSemanticMcpPublicationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewSemanticMcpPublication>>, TError,PreviewSemanticMcpPublicationMutationVariables, TContext> => {
+
+const mutationKey = getPreviewSemanticMcpPublicationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewSemanticMcpPublication>>, PreviewSemanticMcpPublicationMutationVariables> = (props) => {
+          const {workspaceId,apiId,proposalId} = props ?? {};
+
+          return  previewSemanticMcpPublication(workspaceId,apiId,proposalId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewSemanticMcpPublicationMutationResult = NonNullable<Awaited<ReturnType<typeof previewSemanticMcpPublication>>>
+
+    export type PreviewSemanticMcpPublicationMutationError = ErrorType<ErrorResponse | NotFoundResponse>
+    export type PreviewSemanticMcpPublicationMutationVariables = {workspaceId: string;apiId: string;proposalId: string}
+
+    /**
+ * @summary Preview a separately approved MCP description publication
+ */
+export const usePreviewSemanticMcpPublication = <TError = ErrorType<ErrorResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSemanticMcpPublication>>, TError,PreviewSemanticMcpPublicationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewSemanticMcpPublication>>,
+        TError,
+        PreviewSemanticMcpPublicationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPreviewSemanticMcpPublicationMutationOptions(options));
     }
 
 export const getListOperationsUrl = (workspaceId: string,
